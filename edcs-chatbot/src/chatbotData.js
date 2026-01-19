@@ -1,0 +1,192 @@
+export const chatbotData = {
+  main: {
+    message: "👋 Hello! Welcome to our company. We specialize in SAP Consulting, Oracle Services, and IT Staffing Solutions. How can I help you today?",
+    options: [
+      { id: 'sap', text: '1️⃣ SAP Consulting', action: 'menu' },
+      { id: 'oracle', text: '2️⃣ Oracle Services', action: 'menu' },
+      { id: 'staffing', text: '3️⃣ Managing services', action: 'menu' },
+      { id: 'company', text: '4️⃣ Company & Services', action: 'menu' },
+      { id: 'engagement', text: '5️⃣ Engagement & Pricing', action: 'menu' },
+      { id: 'support', text: '6️⃣ Support & Delivery', action: 'menu' },
+      { id: 'about', text: 'ℹ️ About Us', action: 'answer' },
+      { id: 'contact', text: '📞 Contact Support', action: 'menu' },
+      { id: 'ticket', text: '🎫 Submit a Query', action: 'ticket' },
+      { id: 'meeting', text: '📅 Request a Meeting', action: 'meeting' },
+      { id: 'checkStatus', text: '🔍 Check Query Status', action: 'checkStatus' }
+    ]
+  },
+  sap: {
+    message: "Great! We offer end-to-end SAP services. What are you looking for?",
+    options: [
+      { id: 'sap1', text: 'What SAP services do you offer?', action: 'answer' },
+      { id: 'sap2', text: 'SAP S/4HANA Migration', action: 'answer' },
+      { id: 'sap3', text: 'SAP Implementation', action: 'answer' },
+      { id: 'sap4', text: 'SAP Support & Maintenance', action: 'answer' },
+      { id: 'sap5', text: 'Hire SAP Consultants', action: 'answer' },
+      { id: 'sap6', text: 'SAP functional and technical consultants', action: 'answer' }
+    ]
+  },
+  oracle: {
+    message: "We provide Oracle E-Business Suite, Fusion Cloud, and Database services. What do you need help with?",
+    options: [
+      { id: 'ora1', text: 'What Oracle services do you support?', action: 'answer' },
+      { id: 'ora2', text: 'Oracle Cloud (Fusion) Migration', action: 'answer' },
+      { id: 'ora3', text: 'Oracle E-Business Suite', action: 'answer' },
+      { id: 'ora4', text: 'DBA Services', action: 'answer' },
+      { id: 'ora5', text: 'Hire Oracle Consultants', action: 'answer' }
+    ]
+  },
+  staffing: {
+    message: "We offer contract, contract-to-hire, full-time hiring, and project staffing. What are you looking for?",
+    options: [
+      { id: 'staff1', text: 'What staffing solutions do you provide?', action: 'answer' },
+      { id: 'staff2', text: 'What skill sets do you specialize in?', action: 'answer' },
+      { id: 'staff3', text: 'How quickly can you deploy consultants?', action: 'answer' },
+      { id: 'staff4', text: 'Background checks and screening', action: 'answer' },
+      { id: 'staff5', text: 'Hire IT Talent', action: 'answer' },
+      { id: 'staff6', text: 'Technologies We Staff', action: 'answer' }
+    ]
+  },
+  company: {
+    message: "Company & Services Information:",
+    options: [
+      { id: 'comp1', text: 'What services does your company provide?', action: 'answer' },
+      { id: 'comp2', text: 'Who are your typical clients?', action: 'answer' },
+      { id: 'comp3', text: 'Remote and onsite consulting', action: 'answer' },
+      { id: 'comp4', text: 'International clients', action: 'answer' },
+      { id: 'comp5', text: 'Business hours', action: 'answer' },
+      { id: 'comp6', text: 'Location', action: 'answer' }
+    ]
+  },
+  engagement: {
+    message: "Engagement & Pricing Information:",
+    options: [
+      { id: 'eng1', text: 'How to request a proposal or quote?', action: 'answer' },
+      { id: 'eng2', text: 'How are services priced?', action: 'answer' },
+      { id: 'eng3', text: 'NDAs and long-term contracts', action: 'answer' }
+    ]
+  },
+  support: {
+    message: "Support & Delivery Information:",
+    options: [
+      { id: 'sup1', text: 'Post-implementation support', action: 'answer' },
+      { id: 'sup2', text: 'Project delivery methodology', action: 'answer' },
+      { id: 'sup3', text: 'Offshore development teams', action: 'answer' }
+    ]
+  },
+  contact: {
+    message: "How would you like to reach us?",
+    options: [
+      { id: 'con1', text: '📧 Email', action: 'answer' },
+      { id: 'con2', text: '📞 Phone', action: 'answer' },
+      { id: 'con3', text: '📝 Request a Callback', action: 'ticket' }
+    ]
+  }
+};
+
+export const answers = {
+  // About Us
+  about:
+    "About Us:\n\nWe are an IT consulting company specializing in SAP, Oracle, and IT Staffing. We help enterprises streamline operations and build strong technology teams.\n\n✓ SAP Consulting expertise\n✓ Oracle Services\n✓ IT Staffing Solutions\n✓ Serving clients globally\n✓ 24/7 support available",
+
+  // SAP Consulting
+  sap1:
+    "SAP Services We Offer:\n\n• SAP Implementation (ECC, S/4HANA)\n• SAP S/4HANA Migration & Conversion\n• SAP Support & Maintenance\n• SAP Integration Services\n• SAP Module Expertise:\n  - FI/CO, MM, SD, PP\n  - HCM, Basis, ABAP\n  - And more\n\nWould you like to schedule a consultation?",
+  
+  sap2:
+    "SAP S/4HANA Migration:\n\nYes—our team has experience in:\n• Technical conversion\n• Greenfield migration\n• Brownfield migration\n• Hybrid approach\n\nWe offer comprehensive support from planning to go-live and beyond.\n\nWould you like to connect with a migration expert?",
+  
+  sap3:
+    "SAP Implementation:\n\nWe provide SAP implementation for ECC and S/4HANA, covering:\n• Functional modules\n• Technical modules\n• End-to-end implementation\n• Integration services\n\nOur proven methodology ensures successful project delivery.\n\nWould you like to schedule a consultation?",
+  
+  sap4:
+    "SAP Support & Maintenance:\n\nWe provide:\n• 24/7 SAP Support\n• AMS (Application Management Services)\n• Production issue handling\n• System monitoring\n• Performance optimization\n• Incident management\n\nOur support team ensures your SAP systems run smoothly.",
+  
+  sap5:
+    "Hire SAP Consultants:\n\nWe have certified SAP consultants across:\n• FI/CO (Finance & Controlling)\n• MM (Materials Management)\n• SD (Sales & Distribution)\n• PP (Production Planning)\n• HCM (Human Capital Management)\n• Basis & ABAP\n\nAvailable for:\n✓ Contract staffing\n✓ Contract-to-hire\n✓ Full-time placement\n\nWould you like profiles of SAP consultants or our rate card?",
+  
+  sap6:
+    "SAP Functional and Technical Consultants:\n\nAbsolutely! We offer certified SAP consultants:\n\nFunctional:\n• FI/CO, MM, SD, PP, HCM, QM\n\nTechnical:\n• Basis, ABAP, PI/PO, BW/BI, Fiori\n\nAll consultants are:\n✓ Certified and experienced\n✓ Available across multiple levels\n✓ Ready for immediate deployment",
+
+  // Oracle Services
+  ora1:
+    "Oracle Services We Support:\n\n• Oracle E-Business Suite (EBS)\n• Oracle Cloud Applications (Fusion)\n• Oracle Database Administration & Support\n• Oracle Financials, SCM, HCM modules\n• Upgrades and integrations\n• End-to-end implementations\n\nWe provide comprehensive Oracle solutions for enterprises.",
+  
+  ora2:
+    "Oracle Cloud Migration Services:\n\nYes! We assist with:\n• Migration planning\n• Data migration\n• Integration setup\n• Testing and validation\n• Post-go-live support\n\nOur team ensures a smooth transition to Oracle Cloud (Fusion).\n\nWould you like to request a demo or view our service offerings?",
+  
+  ora3:
+    "Oracle E-Business Suite:\n\nWe handle:\n• Upgrades and patches\n• Customization\n• Integrations\n• Support and maintenance\n• Performance optimization\n• Module implementation\n\nOur expertise covers all major Oracle EBS modules.\n\nWould you like us to share our capability deck?",
+  
+  ora4:
+    "DBA Services:\n\nWe offer:\n• Remote DBA services\n• Performance tuning\n• 24/7 monitoring\n• Database administration\n• Backup and recovery\n• Security management\n\nOur DBAs ensure optimal database performance and availability.\n\nWould you like a quote?",
+  
+  ora5:
+    "Hire Oracle Consultants:\n\nWe provide experienced:\n• Oracle developers\n• Functional consultants\n• Database administrators (DBAs)\n• Solution architects\n• Cloud specialists\n\nAvailable for contract, contract-to-hire, or full-time roles.\n\nPlease share your requirements and we'll provide qualified profiles within 24-72 hours.",
+
+  // IT Staffing
+  staff1:
+    "Staffing Solutions We Provide:\n\n• Contract staffing\n• Contract-to-hire\n• Full-time direct hiring\n• Project-based staffing\n• Offshore and nearshore resourcing\n\nFlexible engagement models to meet your needs.",
+  
+  staff2:
+    "Skill Sets We Specialize In:\n\n• SAP consultants (all modules)\n• Oracle specialists\n• DevOps engineers\n• Cloud engineers (AWS, Azure, GCP)\n• Java/.NET developers\n• Data engineers\n• QA testers\n• And many more IT roles\n\nWe staff across diverse technologies and platforms.",
+  
+  staff3:
+    "Consultant Deployment Timeline:\n\nDepending on requirements, we can provide:\n• Qualified profiles within 24-72 hours\n• Pre-screened candidates\n• Technical interviews arranged\n• Fast onboarding process\n\nWe maintain a pool of readily available consultants.",
+  
+  staff4:
+    "Background Checks and Screening:\n\nYes! We conduct:\n✓ Technical screening\n✓ Experience verification\n✓ Background checks\n✓ Reference checks\n✓ Skill assessments\n\nAll consultants are thoroughly vetted before deployment.",
+  
+  staff5:
+    "Hire IT Talent:\n\nWe can provide qualified candidates within 24-72 hours.\n\nOur process:\n1. Understand your requirements\n2. Search our talent pool\n3. Screen and interview\n4. Present qualified profiles\n5. Facilitate hiring\n\nWhat role or skills are you looking for?",
+  
+  staff6:
+    "Technologies We Staff:\n\n• SAP (all modules)\n• Oracle (EBS, Cloud, DBA)\n• Cloud (AWS, Azure, GCP)\n• DevOps (Jenkins, Docker, Kubernetes)\n• Programming (Java, .NET, Python)\n• Data Engineering (ETL, Big Data)\n• QA and Testing\n• Business Intelligence\n• And more\n\nWould you like to speak with a staffing specialist?",
+
+  // Company & Services
+  comp1:
+    "Our Services:\n\nWe specialize in three major areas:\n\n1. SAP Consulting\n   • Implementation, support, migration, integration\n\n2. Oracle Services\n   • E-Business Suite, Oracle Cloud, database services\n\n3. IT Staffing\n   • Contract, contract-to-hire, full-time placement\n\nWe help enterprises optimize their IT operations.",
+  
+  comp2:
+    "Our Typical Clients:\n\nWe serve enterprises in:\n• Manufacturing\n• Retail\n• Healthcare\n• Logistics\n• Finance\n• And other industries\n\nOur clients require:\n✓ Advanced ERP solutions\n✓ IT staffing solutions\n✓ Technology consulting",
+  
+  comp3:
+    "Remote and Onsite Consulting:\n\nYes! We provide:\n✓ Onsite consulting\n✓ Hybrid model\n✓ Fully remote consulting\n\nWe adapt to your requirements and preferences for maximum flexibility.",
+  
+  comp4:
+    "International Clients:\n\nYes, we serve clients across multiple geographies including:\n• United States\n• Europe\n• Middle East\n• Asia\n\nOur global presence enables us to support clients worldwide.",
+  
+  comp5:
+    "Business Hours:\n\nOur team is available:\n• Monday - Friday\n• 9 AM - 6 PM (local time)\n• 24/7 support for critical issues\n\nWe accommodate different time zones for global clients.",
+  
+  comp6:
+    "Our Location:\n\nWe're located at [Your Address]\n\n• Online services available worldwide\n• Remote consulting capabilities\n• Global delivery model\n• Multiple office locations\n\nWe serve clients regardless of location.",
+
+  // Engagement & Pricing
+  eng1:
+    "Request a Proposal or Quote:\n\nYou can contact us through:\n📧 Email us your requirements\n🌐 Website contact form\n📞 Speak with our sales team\n💬 Live chat on our website\n\nOur team will respond within 24 hours with a detailed proposal.",
+  
+  eng2:
+    "Service Pricing:\n\nPricing depends on:\n• Project scope\n• Consultant experience level\n• Duration of engagement\n• Technology requirements\n\nWe offer flexible engagement models:\n✓ Fixed price\n✓ Time & material\n✓ Dedicated resource model\n\nContact us for a customized quote.",
+  
+  eng3:
+    "NDAs and Long-term Contracts:\n\nYes! We provide:\n✓ Non-Disclosure Agreements (NDAs)\n✓ Master Service Agreements (MSAs)\n✓ Service Level Agreements (SLAs)\n✓ Long-term contracts\n\nWe follow strict data confidentiality policies and can customize agreements based on your requirements.",
+
+  // Support & Delivery
+  sup1:
+    "Post-Implementation Support:\n\nYes! We offer:\n✓ 24/7 support\n✓ Ticket-based support\n✓ Long-term maintenance contracts\n✓ Bug fixes and enhancements\n✓ System monitoring\n✓ Performance optimization\n\nOur support ensures your systems continue to deliver value.",
+  
+  sup2:
+    "Project Delivery Methodology:\n\nOur teams utilize:\n• Agile methodology\n• Waterfall methodology\n• Hybrid approach\n\nWe adapt our methodology based on:\n✓ Client needs\n✓ Project requirements\n✓ Industry best practices\n✓ Timeline constraints",
+  
+  sup3:
+    "Offshore Development Teams:\n\nYes! Our offshore teams offer:\n✓ Multiple time zone coverage\n✓ Cost-effective solutions\n✓ Experienced professionals\n✓ Quality delivery\n✓ Seamless communication\n✓ Scalable resources\n\nWe can augment your team or handle entire projects offshore.",
+
+  // Contact Options
+  con1:
+    "📧 Email Contact:\n\nFor General Inquiries:\nankitha.g@edcs.co.in\n\nOur team responds within 24 hours during business days.",
+  
+  con2:
+    "📞 Phone Contact:\n\nMain Line: [Your Phone Number]\nSupport: [Support Phone Number]\nSales: [Sales Phone Number]\n\nAvailable: Monday-Friday, 9 AM - 6 PM\n24/7 emergency support for existing clients",
+  
+};

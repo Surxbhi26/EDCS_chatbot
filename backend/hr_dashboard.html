@@ -1,0 +1,1742 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EDCS HR Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      min-height: 100vh;
+    }
+
+    .top-header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+      color: white;
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 20px rgba(30, 58, 95, 0.3);
+    }
+
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #ef5b6c 0%, #d94456 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 4px 15px rgba(239, 91, 108, 0.4);
+    }
+
+    .logo-text h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .logo-text p {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .last-updated {
+      font-size: 13px;
+      opacity: 0.8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 30px;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+      animation: slideDown 0.5s ease;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+    }
+
+    .stat-icon.total {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    }
+
+    .stat-icon.pending {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .stat-icon.progress {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .stat-icon.resolved {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    }
+
+    .stat-info h3 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+
+    .stat-info p {
+      font-size: 14px;
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    @keyframes slideDown {
+      from {
+        transform: translateY(-20px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 25px;
+      background: white;
+      border-radius: 12px;
+      padding: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+    }
+
+    .tab {
+      padding: 14px 28px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .tab:hover {
+      background: #f1f5f9;
+      color: #1e3a5f;
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(30, 58, 95, 0.3);
+    }
+
+    .tab-icon {
+      font-size: 18px;
+    }
+
+    .controls {
+      background: white;
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px 25px;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      animation: fadeIn 0.6s ease 0.2s backwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 250px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 12px 20px 12px 45px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      background: #f8fafc;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: #1e3a5f;
+      box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+      background: white;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #a0aec0;
+      font-size: 18px;
+    }
+
+    select {
+      padding: 12px 18px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 14px;
+      background: #f8fafc;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      color: #2d3748;
+      font-weight: 500;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #1e3a5f;
+      box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+    }
+
+    .filter-label {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 600;
+      margin-right: -8px;
+    }
+
+    .btn {
+      padding: 12px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(30, 58, 95, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(30, 58, 95, 0.4);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3);
+    }
+
+    .btn-success:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+    }
+
+    .btn-secondary {
+      background: #64748b;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .content-section {
+      display: none;
+    }
+
+    .content-section.active {
+      display: block;
+    }
+
+    .tickets-container,
+    .meetings-container {
+      display: grid;
+      gap: 20px;
+      animation: fadeIn 0.6s ease 0.4s backwards;
+    }
+
+    .ticket-card,
+    .meeting-card {
+      background: white;
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 25px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+      transition: all 0.3s ease;
+      animation: slideUp 0.5s ease backwards;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .ticket-card:hover,
+    .meeting-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+      border-color: #cbd5e1;
+    }
+
+    .ticket-header,
+    .meeting-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #f1f5f9;
+    }
+
+    .ticket-id,
+    .meeting-id {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1e3a5f;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ticket-id::before,
+    .meeting-id::before {
+      content: '#';
+      color: #94a3b8;
+    }
+
+    .status-badge {
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-Pending {
+      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+      color: #dc2626;
+      border: 1px solid #fecaca;
+    }
+
+    .status-InProgress,
+    .status-Scheduled,
+    .status-Confirmed {
+      background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    .status-Resolved,
+    .status-Completed {
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      color: #16a34a;
+      border: 1px solid #bbf7d0;
+    }
+
+    .status-Cancelled {
+      background: #f8fafc;
+      color: #64748b;
+      border: 1px solid #cbd5e1;
+    }
+
+    .ticket-content,
+    .meeting-content {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .info-section {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      padding: 18px;
+      border-radius: 12px;
+      border-left: 4px solid #1e3a5f;
+    }
+
+    .info-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .info-value {
+      color: #334155;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.6;
+    }
+
+    .info-value strong {
+      color: #1e293b;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .description-box {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      padding: 18px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border-left: 4px solid #64748b;
+    }
+
+    .description-box .info-label {
+      margin-bottom: 10px;
+    }
+
+    .description-text {
+      color: #4a5568;
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+
+    .response-section {
+      background: #f1f5f9;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 15px;
+    }
+
+    .response-section .info-label {
+      margin-bottom: 12px;
+    }
+
+    textarea,
+    input[type="text"],
+    input[type="email"],
+    input[type="number"],
+    input[type="datetime-local"] {
+      width: 100%;
+      padding: 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      background: white;
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    textarea:focus,
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="number"]:focus,
+    input[type="datetime-local"]:focus {
+      outline: none;
+      border-color: #1e3a5f;
+      box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+    }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .action-row select {
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 8px;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .modal.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+      animation: slideUp 0.3s ease;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #f1f5f9;
+    }
+
+    .modal-header h2 {
+      color: #1e293b;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .close-btn {
+      background: #f1f5f9;
+      border: none;
+      font-size: 20px;
+      color: #64748b;
+      cursor: pointer;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .close-btn:hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #64748b;
+      font-size: 16px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+    }
+
+    .empty-state::before {
+      content: '📭';
+      font-size: 48px;
+      display: block;
+      margin-bottom: 16px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: #64748b;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .priority-high,
+    .priority-urgent {
+      color: #dc2626;
+      font-weight: 600;
+    }
+
+    .priority-medium,
+    .priority-normal {
+      color: #d97706;
+      font-weight: 600;
+    }
+
+    .priority-low {
+      color: #16a34a;
+      font-weight: 600;
+    }
+
+    /* Urgent Priority Indicator */
+    .urgent-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      animation: urgentPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes urgentPulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+      }
+
+      50% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+      }
+    }
+
+    .ticket-card.urgent {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2), 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .ticket-card.urgent:hover {
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3), 0 8px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    .meeting-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: #1e3a5f;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      background: #f1f5f9;
+    }
+
+    .meeting-link:hover {
+      background: #e2e8f0;
+    }
+
+    .customer-badge {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      padding: 14px 18px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      color: #1e40af;
+      border-left: 4px solid #2563eb;
+      font-weight: 500;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+    }
+
+    @media (max-width: 768px) {
+      .top-header {
+        padding: 15px 20px;
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+      }
+
+      .container {
+        padding: 20px;
+      }
+
+      .stats-bar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .ticket-content,
+      .meeting-content {
+        grid-template-columns: 1fr;
+      }
+
+      .tabs {
+        overflow-x: auto;
+      }
+
+      .controls {
+        padding: 15px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Top Header with Logo -->
+  <div class="top-header">
+    <div class="logo-section">
+      <div class="logo-icon">📊</div>
+      <div class="logo-text">
+        <h1>EDCS HR Dashboard</h1>
+        <p>Expora Database Consulting Pvt. Ltd India</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="last-updated">
+        🕐 Last updated: <span id="lastUpdated">-</span>
+      </div>
+      <button class="btn btn-primary" onclick="refreshAll()">↻ Refresh All</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Stats Bar -->
+    <div class="stats-bar" id="statsBar">
+      <div class="stat-card">
+        <div class="stat-icon total" id="statIcon1">📋</div>
+        <div class="stat-info">
+          <h3 id="statTotal">0</h3>
+          <p id="statLabel1">Total Tickets</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon pending" id="statIcon2">⏳</div>
+        <div class="stat-info">
+          <h3 id="statPending">0</h3>
+          <p id="statLabel2">Pending</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon progress" id="statIcon3">🔄</div>
+        <div class="stat-info">
+          <h3 id="statProgress">0</h3>
+          <p id="statLabel3">In Progress</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon resolved" id="statIcon4">✅</div>
+        <div class="stat-info">
+          <h3 id="statResolved">0</h3>
+          <p id="statLabel4">Resolved</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs with Icons -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('tickets')">
+        <span class="tab-icon">🎫</span>
+        Support Tickets
+      </button>
+      <button class="tab" onclick="switchTab('meetings')">
+        <span class="tab-icon">📅</span>
+        Meeting Schedule
+      </button>
+    </div>
+
+    <!-- TICKETS SECTION -->
+    <div id="ticketsSection" class="content-section active">
+      <div class="controls">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input id="searchTickets" placeholder="Search tickets by ID, name, email, or description..." />
+        </div>
+        <span class="filter-label">Status:</span>
+        <select id="filterStatus">
+          <option value="all">All Statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+        </select>
+        <span class="filter-label">Time:</span>
+        <select id="filterTime">
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="older">Older</option>
+        </select>
+        <button class="btn btn-primary" onclick="loadTickets()">↻ Refresh</button>
+      </div>
+
+      <div id="ticketsContainer" class="tickets-container">
+        <div class="loading">⏳ Loading tickets...</div>
+      </div>
+    </div>
+
+    <!-- MEETINGS SECTION -->
+    <div id="meetingsSection" class="content-section">
+      <div class="controls">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input id="searchMeetings" placeholder="Search meetings by ID, title, or attendees..." />
+        </div>
+        <span class="filter-label">Status:</span>
+        <select id="filterMeetingStatus">
+          <option value="all">All Statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Scheduled">Scheduled</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+        <span class="filter-label">Time:</span>
+        <select id="filterMeetingTime">
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="older">Older</option>
+        </select>
+        <button class="btn btn-success" onclick="openNewMeetingModal()">+ New Meeting</button>
+        <button class="btn btn-primary" onclick="loadMeetings()">↻ Refresh</button>
+      </div>
+
+      <div id="meetingsContainer" class="meetings-container">
+        <div class="loading">⏳ Loading meetings...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW MEETING MODAL -->
+  <div id="newMeetingModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📅 Schedule New Meeting</h2>
+        <button class="close-btn" onclick="closeNewMeetingModal()">×</button>
+      </div>
+
+      <form id="newMeetingForm" onsubmit="createMeeting(event)">
+        <div class="form-group">
+          <label>Meeting Title *</label>
+          <input type="text" id="meetingTitle" required placeholder="e.g., Q4 Strategy Review">
+        </div>
+
+        <div class="form-group">
+          <label>Date & Time *</label>
+          <input type="datetime-local" id="meetingDateTime" required>
+        </div>
+
+        <div class="form-group">
+          <label>Duration (minutes)</label>
+          <input type="number" id="meetingDuration" value="60" min="15" step="15">
+        </div>
+
+        <div class="form-group">
+          <label>Attendees (comma-separated emails)</label>
+          <textarea id="meetingAttendees" rows="3" placeholder="john@example.com, jane@example.com"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Meeting Link (optional)</label>
+          <input type="text" id="meetingLink" placeholder="https://zoom.us/j/123456789">
+        </div>
+
+        <div class="form-group">
+          <label>Agenda / Notes</label>
+          <textarea id="meetingAgenda" rows="4" placeholder="Meeting agenda and discussion points..."></textarea>
+        </div>
+
+        <div class="action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeNewMeetingModal()">Cancel</button>
+          <button type="submit" class="btn btn-success" style="flex: 1;">✨ Create Meeting</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- EMAIL MODAL -->
+  <div id="emailModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📧 Send Email</h2>
+        <button class="close-btn" onclick="closeEmailModal()">×</button>
+      </div>
+
+      <form id="emailForm" onsubmit="sendEmail(event)">
+        <div class="form-group">
+          <label>To *</label>
+          <input type="email" id="emailTo" required placeholder="recipient@example.com">
+        </div>
+
+        <div class="form-group">
+          <label>CC (comma-separated, optional)</label>
+          <input type="text" id="emailCC" placeholder="cc1@example.com, cc2@example.com">
+        </div>
+
+        <div class="form-group">
+          <label>Subject *</label>
+          <input type="text" id="emailSubject" required placeholder="Regarding your ticket...">
+        </div>
+
+        <div class="form-group">
+          <label>Message *</label>
+          <textarea id="emailBody" rows="8" required placeholder="Type your message here..."></textarea>
+        </div>
+
+        <div
+          style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; font-size: 13px; color: #1e40af; border-left: 4px solid #2563eb;">
+          <strong>💡 Tip:</strong> The message will be sent from the EDCS support email.
+        </div>
+
+        <div class="action-row">
+          <button type="button" class="btn btn-secondary" onclick="closeEmailModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="flex: 1;">📧 Send Email</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:5000';
+    let allTickets = [];
+    let allMeetings = [];
+
+    // Update last refreshed time
+    function updateLastUpdated() {
+      const now = new Date();
+      document.getElementById('lastUpdated').textContent = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // Update stats based on active tab
+    function updateTicketStats() {
+      const total = allTickets.length;
+      const pending = allTickets.filter(t => t.status === 'Pending').length;
+      const inProgress = allTickets.filter(t => t.status === 'In Progress').length;
+      const resolved = allTickets.filter(t => t.status === 'Resolved').length;
+      const urgent = allTickets.filter(t => t.priority === 'Urgent' || t.priority === 'High').length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statPending').textContent = pending;
+      document.getElementById('statProgress').textContent = inProgress;
+      document.getElementById('statResolved').textContent = resolved;
+
+      // Update labels for tickets
+      document.getElementById('statLabel1').textContent = 'Total Tickets';
+      document.getElementById('statLabel2').textContent = urgent > 0 ? `Pending (${urgent} Urgent)` : 'Pending';
+      document.getElementById('statLabel3').textContent = 'In Progress';
+      document.getElementById('statLabel4').textContent = 'Resolved';
+
+      // Update icons
+      document.getElementById('statIcon1').textContent = '🎫';
+      document.getElementById('statIcon2').textContent = '⏳';
+      document.getElementById('statIcon3').textContent = '🔄';
+      document.getElementById('statIcon4').textContent = '✅';
+    }
+
+    function updateMeetingStats() {
+      const total = allMeetings.length;
+      const pending = allMeetings.filter(m => m.status === 'Pending' || m.status === 'Scheduled').length;
+      const confirmed = allMeetings.filter(m => m.status === 'Confirmed').length;
+      const completed = allMeetings.filter(m => m.status === 'Completed').length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statPending').textContent = pending;
+      document.getElementById('statProgress').textContent = confirmed;
+      document.getElementById('statResolved').textContent = completed;
+
+      // Update labels for meetings
+      document.getElementById('statLabel1').textContent = 'Total Meetings';
+      document.getElementById('statLabel2').textContent = 'Scheduled';
+      document.getElementById('statLabel3').textContent = 'Confirmed';
+      document.getElementById('statLabel4').textContent = 'Completed';
+
+      // Update icons
+      document.getElementById('statIcon1').textContent = '📅';
+      document.getElementById('statIcon2').textContent = '📆';
+      document.getElementById('statIcon3').textContent = '✔️';
+      document.getElementById('statIcon4').textContent = '🎉';
+    }
+
+    // Alias for backward compatibility
+    function updateStats() {
+      if (document.getElementById('meetingsSection').classList.contains('active')) {
+        updateMeetingStats();
+      } else {
+        updateTicketStats();
+      }
+    }
+
+    // Refresh all data
+    function refreshAll() {
+      loadTickets();
+      if (document.getElementById('meetingsSection').classList.contains('active')) {
+        loadMeetings();
+      }
+    }
+
+    // Time filter helper
+    function matchesTimeFilter(dateStr, filterValue) {
+      if (filterValue === 'all') return true;
+      if (!dateStr) return filterValue === 'older';
+
+      const date = new Date(dateStr);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      switch (filterValue) {
+        case 'today':
+          return date >= today;
+        case 'week':
+          return date >= weekAgo;
+        case 'month':
+          return date >= monthAgo;
+        case 'older':
+          return date < monthAgo;
+        default:
+          return true;
+      }
+    }
+
+    // TAB SWITCHING
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+
+      if (tab === 'tickets') {
+        document.querySelector('.tab:nth-child(1)').classList.add('active');
+        document.getElementById('ticketsSection').classList.add('active');
+        updateTicketStats();
+      } else if (tab === 'meetings') {
+        document.querySelector('.tab:nth-child(2)').classList.add('active');
+        document.getElementById('meetingsSection').classList.add('active');
+        loadMeetings();
+      }
+    }
+
+    // ============================================
+    // TICKETS FUNCTIONS
+    // ============================================
+
+    async function loadTickets() {
+      try {
+        const res = await fetch(API_BASE + '/api/tickets');
+        const data = await res.json();
+        if (data.success) {
+          allTickets = data.tickets || [];
+        } else {
+          allTickets = [];
+        }
+      } catch (error) {
+        console.warn('API not available:', error);
+        allTickets = [];
+      }
+      updateStats();
+      updateLastUpdated();
+      renderTickets();
+    }
+
+    function renderTickets() {
+      const container = document.getElementById('ticketsContainer');
+      const search = document.getElementById('searchTickets').value.toLowerCase();
+      const filterStatus = document.getElementById('filterStatus').value;
+      const filterTime = document.getElementById('filterTime').value;
+
+      const filtered = allTickets.filter(t => {
+        const text = (t.ticket_id + ' ' + (t.name || '') + ' ' + (t.email || '') + ' ' + (t.description || '')).toLowerCase();
+        const matchesSearch = text.includes(search);
+        const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
+        const matchesTime = matchesTimeFilter(t.created_at, filterTime);
+        return matchesSearch && matchesStatus && matchesTime;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">No tickets found matching your criteria.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      filtered.forEach((t, index) => {
+        const card = document.createElement('div');
+        const isUrgent = t.priority === 'Urgent' || t.priority === 'High';
+        card.className = 'ticket-card' + (isUrgent ? ' urgent' : '');
+        card.style.animationDelay = (index * 0.08) + 's';
+
+        const statusClass = t.status === 'In Progress' ? 'InProgress' : (t.status || 'Pending').replace(' ', '');
+        const priorityClass = t.priority ? `priority-${t.priority.toLowerCase()}` : '';
+
+        const urgentBadge = isUrgent ? `<span class="urgent-badge">⚠️ Urgent</span>` : '';
+
+        const meetingInfo = t.meeting_id ?
+          `<div style="margin-top: 8px;">
+        <strong>Linked Meeting:</strong> 
+        <a href="#" onclick="viewMeeting('${t.meeting_id}'); return false;" class="meeting-link">
+          ${t.meeting_id} →
+        </a>
+      </div>` : '';
+
+        card.innerHTML = `
+      <div class="ticket-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="ticket-id">${t.ticket_id}</div>
+          ${urgentBadge}
+        </div>
+        <div class="status-badge status-${statusClass}">${t.status || 'Pending'}</div>
+      </div>
+      
+      <div class="ticket-content">
+        <div class="info-section">
+          <div class="info-label">👤 Customer Information</div>
+          <div class="info-value">
+            <strong>${t.name || 'N/A'}</strong>
+            ${t.email || 'No email'}
+            ${t.phone ? '<br/>' + t.phone : ''}
+          </div>
+        </div>
+        
+        <div class="info-section">
+          <div class="info-label">📋 Ticket Details</div>
+          <div class="info-value">
+            <strong>Category:</strong> ${t.category || 'N/A'}<br/>
+            <strong>Priority:</strong> <span class="${priorityClass}">${t.priority || 'N/A'}</span><br/>
+            <strong>Created:</strong> ${t.created_at || 'N/A'}
+            ${meetingInfo}
+          </div>
+        </div>
+      </div>
+      
+      <div class="description-box">
+        <div class="info-label">💬 Customer Query</div>
+        <div class="description-text">${(t.description || 'No description provided').replace(/\\n/g, '\n')}</div>
+      </div>
+      
+      <div class="response-section">
+        <div class="info-label">✍️ Response to Customer</div>
+        <textarea id="resp-${t.ticket_id}" placeholder="Type your response to the customer here...">${t.response || ''}</textarea>
+      </div>
+      
+      <div class="form-group">
+        <label>🔗 Link to Meeting (optional)</label>
+        <input type="text" id="meeting-${t.ticket_id}" value="${t.meeting_id || ''}" placeholder="Enter Meeting ID (e.g., MTG001)">
+      </div>
+      
+      <div class="action-row">
+        <select id="status-${t.ticket_id}">
+          <option value="Pending" ${t.status === 'Pending' ? 'selected' : ''}>Pending</option>
+          <option value="In Progress" ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+          <option value="Resolved" ${t.status === 'Resolved' ? 'selected' : ''}>Resolved</option>
+        </select>
+        <button class="btn btn-primary" onclick="saveTicket('${t.ticket_id}')">Save</button>
+        <button class="btn btn-success" onclick="sendTicketEmail('${t.ticket_id}')">Email</button>
+        <button class="btn btn-danger" onclick="deleteTicket('${t.ticket_id}')">🗑️ Delete</button>
+      </div>
+    `;
+
+        container.appendChild(card);
+      });
+    }
+
+    async function saveTicket(ticketId) {
+      const statusEl = document.getElementById('status-' + ticketId);
+      const respEl = document.getElementById('resp-' + ticketId);
+      const meetingEl = document.getElementById('meeting-' + ticketId);
+
+      const body = {
+        status: statusEl.value,
+        response: respEl.value,
+        meeting_id: meetingEl.value || null
+      };
+
+      try {
+        const res = await fetch(API_BASE + '/api/ticket/' + ticketId + '/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          alert('❌ Update failed: ' + (data.message || 'Unknown error'));
+          return;
+        }
+
+        alert('✅ Ticket updated successfully!');
+        loadTickets();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error updating ticket. Check console for details.');
+      }
+    }
+
+    function sendTicketEmail(ticketId) {
+      const ticket = allTickets.find(t => t.ticket_id === ticketId);
+      if (!ticket) {
+        alert('❌ Ticket not found');
+        return;
+      }
+
+      document.getElementById('emailTo').value = ticket.email || '';
+      document.getElementById('emailCC').value = '';
+      document.getElementById('emailSubject').value = `Update on Ticket ${ticketId}: ${ticket.category}`;
+
+      const emailBody = `Dear ${ticket.name},
+
+Thank you for contacting EDCS support. Here's an update on your ticket:
+
+🎫 Ticket ID: ${ticketId}
+📂 Category: ${ticket.category}
+⚡ Priority: ${ticket.priority}
+📊 Status: ${ticket.status}
+
+Your Query:
+${ticket.description}
+
+Our Response:
+${ticket.response || 'Our team is currently reviewing your request. We will get back to you shortly.'}
+
+If you have any questions, please reply to this email or reference your ticket ID.
+
+Best regards,
+EDCS Support Team`;
+
+      document.getElementById('emailBody').value = emailBody;
+      document.getElementById('emailForm').dataset.ticketId = ticketId;
+      document.getElementById('emailForm').dataset.meetingId = '';
+      document.getElementById('emailModal').classList.add('active');
+    }
+
+    async function deleteTicket(ticketId) {
+      if (!confirm('⚠️ Are you sure you want to delete this ticket?\n\nThis action cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(API_BASE + '/api/ticket/' + ticketId + '/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ Delete failed: ' + (data.message || 'Unknown error'));
+          return;
+        }
+
+        alert('✅ Ticket deleted successfully!');
+        await loadTickets();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error deleting ticket. Check console for details.');
+      }
+    }
+
+    // ============================================
+    // MEETINGS FUNCTIONS
+    // ============================================
+
+    async function loadMeetings() {
+      const container = document.getElementById('meetingsContainer');
+      container.innerHTML = '<div class="loading">⏳ Loading meetings...</div>';
+
+      try {
+        const res = await fetch(API_BASE + '/api/meetings');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (data.success && data.meetings) {
+          allMeetings = data.meetings;
+        } else {
+          allMeetings = [];
+        }
+      } catch (error) {
+        console.error('Error loading meetings:', error);
+        container.innerHTML = `<div class="empty-state">⚠️ Could not connect to server<br/><small style="color: #64748b;">Please check if backend is running</small></div>`;
+        return;
+      }
+
+      updateLastUpdated();
+      updateMeetingStats();
+      renderMeetings();
+    }
+
+    function renderMeetings() {
+      const container = document.getElementById('meetingsContainer');
+      const search = document.getElementById('searchMeetings').value.toLowerCase();
+      const filterStatus = document.getElementById('filterMeetingStatus').value;
+      const filterTime = document.getElementById('filterMeetingTime').value;
+
+      const filtered = allMeetings.filter(m => {
+        const mid = m.meeting_id || '';
+        const text = (mid + ' ' + (m.title || m.purpose || '') + ' ' + (m.attendees || m.email || '')).toLowerCase();
+
+        const matchesSearch = text.includes(search);
+        const matchesStatus = filterStatus === 'all' || m.status === filterStatus;
+        const matchesTime = matchesTimeFilter(m.datetime || m.created_at, filterTime);
+
+        return matchesSearch && matchesStatus && matchesTime;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">No meetings found.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+
+      filtered.forEach((m, index) => {
+        const card = document.createElement('div');
+        card.className = 'meeting-card';
+        card.style.animationDelay = (index * 0.08) + 's';
+
+        const meetingId = m.meeting_id || 'N/A';
+        const ticketId = m.ticket_id || null;
+        const isCustomerRequest = !!m.purpose;
+        const statusClass = (m.status || 'Pending').replace(' ', '');
+
+        const displayDateTime = m.datetime
+          ? formatDate(m.datetime)
+          : (m.date && m.time ? `${m.date} at ${m.time}` : 'N/A');
+
+        const displayTitle = m.title || m.purpose || 'Untitled Meeting';
+        const displayNotes = m.agenda || m.notes || '';
+        const displayAttendees = m.attendees || (m.email ? `${m.name} <${m.email}>` : '');
+
+        const ticketLink = ticketId ?
+          `<div style="margin-top: 8px;">
+        <strong>Linked Ticket:</strong> 
+        <a href="#" onclick="switchTab('tickets'); return false;" class="meeting-link">${ticketId} →</a>
+      </div>` : '';
+
+        const customerBadge = isCustomerRequest ?
+          `<div class="customer-badge">
+        📋 <strong>Customer Request:</strong> ${m.name} | ${m.phone || 'No phone'} | ${m.email || 'No email'}
+      </div>` : '';
+
+        card.innerHTML = `
+      <div class="meeting-header">
+        <div class="meeting-id">${meetingId}</div>
+        <div class="status-badge status-${statusClass}">${m.status || 'Pending'}</div>
+      </div>
+      
+      <div class="meeting-content">
+        <div class="info-section">
+          <div class="info-label">📅 Meeting Details</div>
+          <div class="info-value">
+            <strong>${displayTitle}</strong><br/>
+            <strong>When:</strong> ${displayDateTime}<br/>
+            <strong>Duration:</strong> ${m.duration || 60} minutes<br/>
+            <strong>Created:</strong> ${formatDate(m.created_at)}${ticketLink}
+          </div>
+        </div>
+      </div>
+      
+      ${customerBadge}
+      
+      <div class="response-section">
+        <div class="info-label">👥 Attendees (comma-separated emails)</div>
+        <textarea id="attendees-${meetingId}" placeholder="john@example.com, jane@company.com" style="min-height: 70px;">${displayAttendees}</textarea>
+      </div>
+      
+      <div class="response-section">
+        <div class="info-label">🔗 Meeting Link</div>
+        <input type="text" id="link-${meetingId}" value="${m.link || ''}" placeholder="https://zoom.us/j/123456789">
+      </div>
+      
+      <div class="response-section">
+        <div class="info-label">📝 Notes / Agenda</div>
+        <textarea id="agenda-${meetingId}" style="min-height: 100px;" placeholder="Meeting agenda, discussion points...">${displayNotes}</textarea>
+      </div>
+      
+      <div class="action-row">
+        <select id="status-${meetingId}" style="min-width: 140px;">
+          <option value="Pending" ${m.status === 'Pending' ? 'selected' : ''}>Pending</option>
+          <option value="Scheduled" ${m.status === 'Scheduled' ? 'selected' : ''}>Scheduled</option>
+          <option value="Confirmed" ${m.status === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
+          <option value="Completed" ${m.status === 'Completed' ? 'selected' : ''}>Completed</option>
+          <option value="Cancelled" ${m.status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+        </select>
+        <button class="btn btn-primary" onclick="saveMeeting('${meetingId}')">💾 Save</button>
+        <button class="btn btn-success" onclick="sendMeetingEmail('${meetingId}')">📧 Email</button>
+        <button class="btn btn-danger" onclick="deleteMeeting('${meetingId}')">🗑️ Delete</button>
+      </div>
+    `;
+
+        container.appendChild(card);
+      });
+    }
+
+    async function saveMeeting(meetingId) {
+      const statusEl = document.getElementById('status-' + meetingId);
+      const attendeesEl = document.getElementById('attendees-' + meetingId);
+      const linkEl = document.getElementById('link-' + meetingId);
+      const agendaEl = document.getElementById('agenda-' + meetingId);
+
+      if (!statusEl || !attendeesEl || !linkEl || !agendaEl) {
+        alert('Error: Could not find form fields.');
+        return;
+      }
+
+      const body = {
+        status: statusEl.value,
+        attendees: attendeesEl.value.trim(),
+        link: linkEl.value.trim(),
+        agenda: agendaEl.value.trim()
+      };
+
+      try {
+        const res = await fetch(API_BASE + '/api/meeting/' + meetingId + '/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ Update failed: ' + (data.message || 'Unknown error'));
+          return;
+        }
+
+        alert('✅ Meeting updated successfully!');
+        await loadMeetings();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error updating meeting. Check console for details.');
+      }
+    }
+
+    async function deleteMeeting(meetingId) {
+      if (!confirm('⚠️ Are you sure you want to delete this meeting?\n\nThis action cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(API_BASE + '/api/meeting/' + meetingId + '/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ Delete failed: ' + (data.message || 'Unknown error'));
+          return;
+        }
+
+        alert('✅ Meeting deleted successfully!');
+        await loadMeetings();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error deleting meeting. Check console for details.');
+      }
+    }
+
+    function sendMeetingEmail(meetingId) {
+      const meeting = allMeetings.find(m => m.meeting_id === meetingId);
+      if (!meeting) {
+        alert('❌ Meeting not found');
+        return;
+      }
+
+      const attendees = meeting.attendees || '';
+      const emails = attendees.split(',').map(e => e.trim()).filter(e => e);
+
+      document.getElementById('emailTo').value = emails[0] || '';
+      document.getElementById('emailCC').value = emails.slice(1).join(', ');
+
+      const displayTitle = meeting.title || meeting.purpose || 'Meeting';
+      const displayDateTime = meeting.datetime
+        ? formatDate(meeting.datetime)
+        : (meeting.date && meeting.time ? `${meeting.date} at ${meeting.time}` : 'TBD');
+
+      document.getElementById('emailSubject').value = `Meeting Invitation: ${displayTitle}`;
+
+      const emailBody = `Dear Attendee,
+
+You are invited to the following meeting:
+
+📋 Meeting: ${displayTitle}
+🆔 Meeting ID: ${meetingId}
+📅 Date & Time: ${displayDateTime}
+⏱️ Duration: ${meeting.duration || 60} minutes
+🔗 Meeting Link: ${meeting.link || 'Will be provided'}
+
+Agenda:
+${meeting.agenda || meeting.notes || 'No agenda provided'}
+
+Please confirm your attendance.
+
+Best regards,
+EDCS HR Team`;
+
+      document.getElementById('emailBody').value = emailBody;
+      document.getElementById('emailForm').dataset.meetingId = meetingId;
+      document.getElementById('emailForm').dataset.ticketId = '';
+      document.getElementById('emailModal').classList.add('active');
+    }
+
+    // ============================================
+    // CREATE NEW MEETING
+    // ============================================
+
+    function openNewMeetingModal() {
+      document.getElementById('newMeetingModal').classList.add('active');
+      document.getElementById('newMeetingForm').reset();
+
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('meetingDateTime').value = now.toISOString().slice(0, 16);
+    }
+
+    function closeNewMeetingModal() {
+      document.getElementById('newMeetingModal').classList.remove('active');
+    }
+
+    async function createMeeting(event) {
+      event.preventDefault();
+
+      const newMeeting = {
+        title: document.getElementById('meetingTitle').value.trim(),
+        datetime: document.getElementById('meetingDateTime').value,
+        duration: parseInt(document.getElementById('meetingDuration').value) || 60,
+        attendees: document.getElementById('meetingAttendees').value.trim(),
+        link: document.getElementById('meetingLink').value.trim(),
+        agenda: document.getElementById('meetingAgenda').value.trim(),
+        status: 'Scheduled',
+        ticket_id: null
+      };
+
+      try {
+        const res = await fetch(API_BASE + '/api/meeting/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newMeeting)
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ Creation failed: ' + (data.message || 'Unknown error'));
+          return;
+        }
+
+        alert('✅ Meeting created successfully!\n\nMeeting ID: ' + data.meeting_id);
+        closeNewMeetingModal();
+        await loadMeetings();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error creating meeting. Check console for details.');
+      }
+    }
+
+    // ============================================
+    // EMAIL MODAL FUNCTIONS
+    // ============================================
+
+    function closeEmailModal() {
+      document.getElementById('emailModal').classList.remove('active');
+      document.getElementById('emailForm').reset();
+    }
+
+    async function sendEmail(event) {
+      event.preventDefault();
+
+      const ticketId = document.getElementById('emailForm').dataset.ticketId;
+      const meetingId = document.getElementById('emailForm').dataset.meetingId;
+
+      const emailData = {
+        to: document.getElementById('emailTo').value.trim(),
+        cc: document.getElementById('emailCC').value.trim(),
+        subject: document.getElementById('emailSubject').value.trim(),
+        body: document.getElementById('emailBody').value.trim(),
+        ticket_id: ticketId || null,
+        meeting_id: meetingId || null
+      };
+
+      try {
+        const endpoint = ticketId
+          ? `/api/ticket/${ticketId}/send-email`
+          : `/api/meeting/${meetingId}/send-email`;
+
+        const res = await fetch(API_BASE + endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(emailData)
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ Email send failed: ' + (data.message || 'Unknown error'));
+          return;
+        }
+
+        alert('✅ Email sent successfully!');
+        closeEmailModal();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('❌ Error sending email. Check console for details.');
+      }
+    }
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+
+      try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+
+        return date.toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        return dateStr;
+      }
+    }
+
+    // ============================================
+    // EVENT LISTENERS
+    // ============================================
+
+    document.getElementById('searchTickets').addEventListener('input', renderTickets);
+    document.getElementById('filterStatus').addEventListener('change', renderTickets);
+    document.getElementById('filterTime').addEventListener('change', renderTickets);
+
+    document.getElementById('searchMeetings').addEventListener('input', renderMeetings);
+    document.getElementById('filterMeetingStatus').addEventListener('change', renderMeetings);
+    document.getElementById('filterMeetingTime').addEventListener('change', renderMeetings);
+
+    document.getElementById('newMeetingModal').addEventListener('click', function (e) {
+      if (e.target === this) closeNewMeetingModal();
+    });
+
+    document.getElementById('emailModal').addEventListener('click', function (e) {
+      if (e.target === this) closeEmailModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        closeNewMeetingModal();
+        closeEmailModal();
+      }
+    });
+
+    // INITIALIZE
+    loadTickets();
+  </script>
+</body>
+
+</html>
