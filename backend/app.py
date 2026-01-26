@@ -14,6 +14,7 @@ from database import (
     get_all_meetings,
     get_meeting_by_id,
     meetings_collection,
+    tickets_collection,
 )
 from email_service import (
     send_ticket_notification,
@@ -237,6 +238,40 @@ def hr_send_ticket_email(ticket_id):
         return jsonify({"success": True})
     except Exception as e:
         print(f"❌ Error sending manual status email: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# ============================================
+# HR: Delete ticket
+# ============================================
+@app.route("/api/ticket/<ticket_id>/delete", methods=["DELETE"])
+def hr_delete_ticket(ticket_id):
+    try:
+        print(f"\n🗑️ Deleting ticket: {ticket_id}")
+        
+        docs = (
+            tickets_collection.where("ticket_id", "==", ticket_id)
+            .limit(1)
+            .stream()
+        )
+
+        deleted = False
+        for doc in docs:
+            print(f"Found document: {doc.id}")
+            doc.reference.delete()
+            deleted = True
+            print(f"✅ Ticket {ticket_id} deleted from Firestore")
+
+        if not deleted:
+            print(f"❌ Ticket {ticket_id} not found")
+            return jsonify({"success": False, "message": "Ticket not found"}), 404
+
+        return jsonify({"success": True, "message": "Ticket deleted successfully"})
+        
+    except Exception as e:
+        print(f"❌ Error deleting ticket: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
 
 
