@@ -3,6 +3,14 @@ from firebase_admin import credentials, firestore
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+# Timezone for India Standard Time
+IST = ZoneInfo('Asia/Kolkata')
+
+def get_ist_now():
+    """Get current time in IST as ISO format string"""
+    return datetime.now(IST).isoformat()
 
 load_dotenv()
 
@@ -85,7 +93,7 @@ def update_ticket(ticket_id, update_data):
         docs = tickets_collection.where('ticket_id', '==', ticket_id).limit(1).stream()
         
         for doc in docs:
-            update_data['updated_at'] = datetime.now()
+            update_data['updated_at'] = get_ist_now()
             doc.reference.update(update_data)
             print(f"✅ Ticket updated: {ticket_id}")
             return True

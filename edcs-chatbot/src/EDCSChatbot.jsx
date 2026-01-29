@@ -537,7 +537,7 @@ const EDCSChatbot = () => {
             <br />
             <strong>{ticketData.email}</strong>
             <br />
-            within 24 hours.
+            soon.
           </p>
           <p style={{ fontSize: '12px', color: '#ef5b6c', fontWeight: '500' }}>
             ⚠️ Please check your email for our response
@@ -730,7 +730,7 @@ const EDCSChatbot = () => {
             <br />
             <strong>{meetingData.email}</strong>
             <br />
-            within 4 business hours.
+            soon.
           </p>
           <p style={{ fontSize: '12px', color: '#ef5b6c', fontWeight: '500' }}>
             📅 Meeting will be with EDCS Team

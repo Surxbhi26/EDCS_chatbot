@@ -234,6 +234,10 @@ def send_custom_email(to_email, cc_emails, subject, body):
         print("⚠️ Email credentials not configured. Skipping email.")
         return False
     
+    if not to_email or not to_email.strip():
+        print("⚠️ No recipient email address provided. Skipping email.")
+        return False
+    
     try:
         # Create message
         msg = MIMEMultipart()
