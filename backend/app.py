@@ -3,6 +3,14 @@ from flask_cors import CORS
 import datetime
 import random
 import os
+from zoneinfo import ZoneInfo
+
+# Timezone for India Standard Time
+IST = ZoneInfo('Asia/Kolkata')
+
+def get_ist_now():
+    """Get current time in IST as ISO format string"""
+    return datetime.datetime.now(IST).isoformat()
 
 # Import our services
 from database import (
@@ -57,7 +65,7 @@ def create_ticket():
             "priority": data.get("priority", "Normal"),
             "description": data.get("description"),
             "status": "Pending",
-            "created_at": datetime.datetime.now(),
+            "created_at": get_ist_now(),
             "response": None,
         }
 
@@ -112,7 +120,7 @@ def create_meeting():
             "time": data.get("time"),
             "notes": data.get("notes", ""),
             "status": "Pending",
-            "created_at": datetime.datetime.now(),
+            "created_at": get_ist_now(),
         }
 
         db_id = save_meeting(meeting_data)
@@ -233,11 +241,39 @@ def hr_send_ticket_email(ticket_id):
         if not ticket:
             return jsonify({"success": False, "message": "Ticket not found"}), 404
 
-        print(f"📧 HR triggered email for {ticket_id} to {ticket['email']}")
-        send_status_update_to_customer(ticket, ticket["email"])
-        return jsonify({"success": True})
+        data = request.json or {}
+        
+        print("\n" + "=" * 60)
+        print("📧 SENDING TICKET EMAIL")
+        print("=" * 60)
+        print(f"Ticket ID: {ticket_id}")
+        print(f"To: {data.get('to')}")
+        print(f"CC: {data.get('cc')}")
+        print(f"Subject: {data.get('subject')}")
+        print("=" * 60 + "\n")
+        
+        # Use send_custom_email with CC support
+        success = send_custom_email(
+            to_email=data.get('to'),
+            cc_emails=data.get('cc'),
+            subject=data.get('subject'),
+            body=data.get('body')
+        )
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Email sent successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Failed to send email. Check email configuration."
+            }), 500
     except Exception as e:
         print(f"❌ Error sending manual status email: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -317,7 +353,7 @@ def hr_create_meeting():
             "agenda": data.get("agenda", ""),
             "status": data.get("status", "Scheduled"),
             "ticket_id": data.get("ticket_id"),
-            "created_at": datetime.datetime.now(),
+            "created_at": get_ist_now(),
         }
 
         db_id = save_meeting(meeting_data)
@@ -377,7 +413,7 @@ def hr_update_meeting(meeting_id):
             if data.get("link") is not None:
                 update_data["link"] = data["link"]
                 
-            update_data["updated_at"] = datetime.datetime.now()
+            update_data["updated_at"] = get_ist_now()
             
             print(f"Firestore update_data: {update_data}")
             doc.reference.update(update_data)
@@ -493,7 +529,7 @@ def health_check():
         {
             "status": "ok",
             "message": "EDCS Chatbot Backend is running!",
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": get_ist_now(),
         }
     )
 

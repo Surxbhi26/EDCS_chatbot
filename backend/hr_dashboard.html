@@ -1198,7 +1198,7 @@
           <div class="info-value">
             <strong>Category:</strong> ${t.category || 'N/A'}<br/>
             <strong>Priority:</strong> <span class="${priorityClass}">${t.priority || 'N/A'}</span><br/>
-            <strong>Created:</strong> ${t.created_at || 'N/A'}
+            <strong>Created:</strong> ${formatDate(t.created_at)}
             ${meetingInfo}
           </div>
         </div>
@@ -1296,7 +1296,9 @@ ${ticket.response || 'Our team is currently reviewing your request. We will get 
 If you have any questions, please reply to this email or reference your ticket ID.
 
 Best regards,
-EDCS Support Team`;
+EDCS Support Team
+Expora Database Consulting Pvt. Ltd India
+# 874, Raineo House, 2nd Floor, Modi Hospital Road, West of Chord Road, Basaveshwaranagar, Bengaluru-560079, INDIA`;
 
       document.getElementById('emailBody').value = emailBody;
       document.getElementById('emailForm').dataset.ticketId = ticketId;
@@ -1570,7 +1572,9 @@ ${meeting.agenda || meeting.notes || 'No agenda provided'}
 Please confirm your attendance.
 
 Best regards,
-EDCS HR Team`;
+EDCS HR Team
+Expora Database Consulting Pvt. Ltd India
+# 874, Raineo House, 2nd Floor, Modi Hospital Road, West of Chord Road, Basaveshwaranagar, Bengaluru-560079, INDIA`;
 
       document.getElementById('emailBody').value = emailBody;
       document.getElementById('emailForm').dataset.meetingId = meetingId;
@@ -1695,12 +1699,13 @@ EDCS HR Team`;
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return dateStr;
 
-        return date.toLocaleString('en-US', {
+        return date.toLocaleString('en-IN', {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          hour12: true
         });
       } catch (e) {
         return dateStr;
