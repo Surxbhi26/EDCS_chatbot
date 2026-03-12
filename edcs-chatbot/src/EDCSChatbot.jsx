@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Home, Minus, Bot, User, Calendar, Ticket } from 'lucide-react';
 import { chatbotData, answers } from './chatbotData';
 import { validateTicket, validateMeeting, validateTicketId } from './validation';
+import { apiUrl } from './apiBase';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -60,7 +61,7 @@ const EDCSChatbot = () => {
   }, [messages]);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/chatbot-content')
+    fetch(apiUrl('/api/chatbot-content'))
       .then(res => res.json())
       .then(data => {
         if (data.success && data.content) {
@@ -72,7 +73,7 @@ const EDCSChatbot = () => {
 
   useEffect(() => {
     if (isOpen) {
-      fetch('http://localhost:5000/api/service-status')
+      fetch(apiUrl('/api/service-status'))
         .then(res => res.json())
         .then(data => {
           if (data.available === false) {
@@ -94,7 +95,7 @@ const EDCSChatbot = () => {
           reason: 'browser_closed'
         });
         navigator.sendBeacon(
-          'http://localhost:5000/api/session/end',
+          apiUrl('/api/session/end'),
           new Blob([payload], { type: 'application/json' })
         );
         sessionIdRef.current = null;
@@ -113,7 +114,7 @@ const EDCSChatbot = () => {
       if (document.hidden) {
         hiddenTimer = setTimeout(() => {
           if (sessionIdRef.current) {
-            fetch('http://localhost:5000/api/session/end', {
+            fetch(apiUrl('/api/session/end'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -172,7 +173,7 @@ const EDCSChatbot = () => {
         queueIdRef.current = queueId;
 
         try {
-          const queueRes = await fetch('http://localhost:5000/api/queue/check', {
+          const queueRes = await fetch(apiUrl('/api/queue/check'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ queue_id: queueId }),
@@ -184,7 +185,7 @@ const EDCSChatbot = () => {
             queuePollRef.current = setInterval(async () => {
               try {
                 const statusRes = await fetch(
-                  `http://localhost:5000/api/queue/status/${queueId}`
+                  apiUrl(`/api/queue/status/${queueId}`)
                 );
                 const statusData = await statusRes.json();
                 if (statusData.admitted) {
@@ -198,7 +199,7 @@ const EDCSChatbot = () => {
                   addBotMessage(`${greeting} ${randomWelcome}`, 'main');
 
                   const sessionRes = await fetch(
-                    'http://localhost:5000/api/session/start',
+                    apiUrl('/api/session/start'),
                     { method: 'POST', headers: { 'Content-Type': 'application/json' } }
                   );
                   const sessionData = await sessionRes.json();
@@ -208,7 +209,7 @@ const EDCSChatbot = () => {
                       if (!sessionIdRef.current) return;
                       try {
                         const pingRes = await fetch(
-                          'http://localhost:5000/api/session/ping',
+                          apiUrl('/api/session/ping'),
                           {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -220,17 +221,17 @@ const EDCSChatbot = () => {
                   } catch (err) {
                     console.error('Ping failed:', err);
                   }
-                }, 3000);
+                }, 30000);
                 cleanupIntervalRef.current = setInterval(async () => {
                   try {
-                    await fetch('http://localhost:5000/api/session/cleanup', {
+                    await fetch(apiUrl('/api/session/cleanup'), {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                     });
                   } catch (err) {
                     console.error('Cleanup failed:', err);
                   }
-                }, 5000);
+                }, 60000);
                   }
                 } else {
                   setQueueState(prev => ({ ...prev, position: statusData.position }));
@@ -246,7 +247,7 @@ const EDCSChatbot = () => {
           const randomWelcome = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
           addBotMessage(`${greeting} ${randomWelcome}`, 'main');
 
-          const res = await fetch('http://localhost:5000/api/session/start', {
+          const res = await fetch(apiUrl('/api/session/start'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
           });
@@ -260,7 +261,7 @@ const EDCSChatbot = () => {
           pingIntervalRef.current = setInterval(async () => {
             if (!sessionIdRef.current) return;
             try {
-              const pingRes = await fetch('http://localhost:5000/api/session/ping', {
+              const pingRes = await fetch(apiUrl('/api/session/ping'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session_id: sessionIdRef.current }),
@@ -272,18 +273,18 @@ const EDCSChatbot = () => {
             } catch (err) {
               console.error('Session ping failed:', err);
             }
-          }, 3000);
+          }, 30000);
 
           cleanupIntervalRef.current = setInterval(async () => {
             try {
-              await fetch('http://localhost:5000/api/session/cleanup', {
+              await fetch(apiUrl('/api/session/cleanup'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
               });
             } catch (err) {
               console.error('Session cleanup failed:', err);
             }
-          }, 5000);
+          }, 60000);
         } catch (err) {
           console.error('Error initializing session/queue:', err);
         }
@@ -326,7 +327,7 @@ const EDCSChatbot = () => {
       clearInterval(queuePollRef.current);
     }
     if (sessionIdRef.current) {
-      fetch('http://localhost:5000/api/session/end', {
+      fetch(apiUrl('/api/session/end'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -337,7 +338,7 @@ const EDCSChatbot = () => {
         console.error('Error ending session:', err);
       });
     }
-    fetch('http://localhost:5000/api/queue/admit', {
+    fetch(apiUrl('/api/queue/admit'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     }).catch(err => console.error('Queue admit failed:', err));
@@ -391,7 +392,7 @@ const EDCSChatbot = () => {
     if (sessionIdRef.current) {
       try {
         console.log('handleOptionClick called, sessionId:', sessionIdRef.current, 'query:', option.text);
-        const res = await fetch('http://localhost:5000/api/session/check-repeat', {
+        const res = await fetch(apiUrl('/api/session/check-repeat'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -443,7 +444,7 @@ const EDCSChatbot = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/ticket', {
+      const response = await fetch(apiUrl('/api/ticket'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -454,7 +455,7 @@ const EDCSChatbot = () => {
       if (result.success) {
         setTicketData(prev => ({ ...prev, ticketId: result.ticket_id }));
         try {
-          await fetch('http://localhost:5000/api/department-email', {
+          await fetch(apiUrl('/api/department-email'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -491,7 +492,7 @@ const EDCSChatbot = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/meeting', {
+      const response = await fetch(apiUrl('/api/meeting'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(meetingData),
@@ -502,7 +503,7 @@ const EDCSChatbot = () => {
       if (result.success) {
         setMeetingData(prev => ({ ...prev, meetingId: result.meeting_id }));
         try {
-          await fetch('http://localhost:5000/api/department-email', {
+          await fetch(apiUrl('/api/department-email'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -537,7 +538,7 @@ const EDCSChatbot = () => {
       return;
     }
     try {
-      const response = await fetch(`http://localhost:5000/api/ticket/${checkTicketId}`);
+      const response = await fetch(apiUrl(`/api/ticket/${checkTicketId}`));
       const result = await response.json();
       if (result.success) {
         const ticket = result.ticket;

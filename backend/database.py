@@ -303,7 +303,7 @@ def cleanup_stale_sessions():
                     last_active.timestamp(), tz=timezone.utc
                 )
 
-            if (now - last_active).total_seconds() > 5:
+            if (now - last_active).total_seconds() > 60:
                 session_id = data.get('session_id')
                 end_session(session_id, "timeout")
                 terminated.append(session_id)

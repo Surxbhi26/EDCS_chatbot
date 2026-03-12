@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from './apiBase';
 
-const API = 'http://localhost:5000';
 const DEPARTMENTS = ['SAP', 'Oracle DBA', 'HR Department', 'Accounts'];
 
 const formatDate = (dateStr) => {
@@ -212,7 +212,7 @@ const DepartmentTab = ({ department }) => {
 
   const loadTickets = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/tickets/department/${encodeURIComponent(department)}`);
+      const res = await fetch(apiUrl(`/api/tickets/department/${encodeURIComponent(department)}`));
       const data = await res.json();
       if (data.success) setTickets(data.tickets);
     } catch (err) { console.error(err); }
@@ -220,7 +220,7 @@ const DepartmentTab = ({ department }) => {
 
   const loadMeetings = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/meetings/department/${encodeURIComponent(department)}`);
+      const res = await fetch(apiUrl(`/api/meetings/department/${encodeURIComponent(department)}`));
       const data = await res.json();
       if (data.success) setMeetings(data.meetings);
     } catch (err) { console.error(err); }
@@ -263,7 +263,7 @@ const DepartmentTab = ({ department }) => {
   });
 
   const updateTicketStatus = async (ticket_id, status) => {
-    await fetch(`${API}/api/ticket/${ticket_id}/update`, {
+    await fetch(apiUrl(`/api/ticket/${ticket_id}/update`), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
@@ -272,7 +272,7 @@ const DepartmentTab = ({ department }) => {
   };
 
   const updateMeetingStatus = async (meeting_id, status) => {
-    await fetch(`${API}/api/meeting/${meeting_id}/update`, {
+    await fetch(apiUrl(`/api/meeting/${meeting_id}/update`), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
@@ -281,13 +281,13 @@ const DepartmentTab = ({ department }) => {
 
   const deleteTicket = async (ticket_id) => {
     if (!window.confirm('Delete this ticket? This cannot be undone.')) return;
-    await fetch(`${API}/api/ticket/${ticket_id}/delete`, { method: 'DELETE' });
+    await fetch(apiUrl(`/api/ticket/${ticket_id}/delete`), { method: 'DELETE' });
     loadTickets();
   };
 
   const deleteMeeting = async (meeting_id) => {
     if (!window.confirm('Delete this meeting? This cannot be undone.')) return;
-    await fetch(`${API}/api/meeting/${meeting_id}/delete`, { method: 'DELETE' });
+    await fetch(apiUrl(`/api/meeting/${meeting_id}/delete`), { method: 'DELETE' });
     loadMeetings();
   };
 
@@ -306,8 +306,8 @@ const DepartmentTab = ({ department }) => {
 
   const handleSendEmail = async ({ to, cc, subject, body }) => {
     const endpoint = emailModal.type === 'ticket'
-      ? `${API}/api/ticket/${emailModal.id}/send-email`
-      : `${API}/api/meeting/${emailModal.id}/send-email`;
+      ? apiUrl(`/api/ticket/${emailModal.id}/send-email`)
+      : apiUrl(`/api/meeting/${emailModal.id}/send-email`);
     try {
       const res = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -321,7 +321,7 @@ const DepartmentTab = ({ department }) => {
 
   const handleCreateMeeting = async (form) => {
     try {
-      const res = await fetch(`${API}/api/meeting/create`, {
+      const res = await fetch(apiUrl('/api/meeting/create'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, department, status: 'Scheduled' })
       });
@@ -338,14 +338,28 @@ const DepartmentTab = ({ department }) => {
     const body = replyText[ticket.ticket_id] || '';
     if (!body.trim()) return;
     try {
-      await fetch(`${API}/api/ticket/${ticket.ticket_id}/send-email`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: ticket.email, subject: `Re: Your Query ${ticket.ticket_id}`, body })
+      await fetch(`http://localhost:5000/api/ticket/${ticket.ticket_id}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: ticket.email,
+          cc: '',
+          subject: `Re: Your Query ${ticket.ticket_id} - ${ticket.category}`,
+          body: `Dear ${ticket.name},\n\nThank you for contacting EDCS Support.\n\nTicket ID: ${ticket.ticket_id}\nCategory: ${ticket.category}\nPriority: ${ticket.priority}\nStatus: ${ticket.status}\n\nOur Response:\n${body}\n\nIf you have further questions, please submit a new query through our chatbot.\n\nBest regards,\nEDCS Support Team\nExpora Database Consulting Pvt. Ltd India`
+        })
       });
-      setActionStatus(p => ({ ...p, [`reply_${ticket.ticket_id}`]: 'Sent!' }));
-      setReplyOpen(p => ({ ...p, [ticket.ticket_id]: false }));
-      setReplyText(p => ({ ...p, [ticket.ticket_id]: '' }));
-    } catch (err) { console.error(err); }
+      setActionStatus(p => ({ 
+        ...p, [`reply_${ticket.ticket_id}`]: 'Sent!' 
+      }));
+      setReplyOpen(p => ({ 
+        ...p, [ticket.ticket_id]: false 
+      }));
+      setReplyText(p => ({ 
+        ...p, [ticket.ticket_id]: '' 
+      }));
+    } catch (err) { 
+      console.error(err); 
+    }
   };
 
   const inputStyle = { padding: '10px 14px', borderRadius: '8px', border: '2px solid #e2e8f0', fontSize: '14px', backgroundColor: '#f8fafc', outline: 'none' };
@@ -388,7 +402,7 @@ const DepartmentTab = ({ department }) => {
           {subTab === 'meetings' && (
             <button onClick={() => setNewMeetingModal(true)} style={{ ...btnStyle('#22c55e'), padding: '10px 18px', fontSize: '14px' }}>+ New Meeting</button>
           )}
-          <button onClick={() => { loadTickets(); loadMeetings(); }} style={{ ...btnStyle('#1e3a5f'), padding: '10px 18px', fontSize: '14px' }}>↻ Refresh</button>
+          <button onClick={() => { loadTickets(); loadMeetings(); window.location.reload(); }} style={{ ...btnStyle('#1e3a5f'), padding: '10px 18px', fontSize: '14px' }}>↻ Refresh</button>
         </div>
 
         {loading ? (
@@ -544,4 +558,3 @@ const DepartmentDashboard = () => {
 };
 
 export default DepartmentDashboard;
-

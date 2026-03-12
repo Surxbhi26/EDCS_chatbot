@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from './apiBase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { db, auth } from './firebase';
@@ -61,7 +62,7 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/chatbot-content')
+    fetch(apiUrl('/api/chatbot-content'))
       .then(res => res.json())
       .then(data => {
         if (data.success) setChatbotContent(data.content);
@@ -141,7 +142,7 @@ const AdminDashboard = () => {
   const handleSaveChatbotContent = async () => {
     setContentSaving(true);
     try {
-      const res = await fetch('http://localhost:5000/api/chatbot-content', {
+      const res = await fetch(apiUrl('/api/chatbot-content'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(chatbotContent)
@@ -177,7 +178,7 @@ const AdminDashboard = () => {
   const handleTerminateSession = async (session_id) => {
     if (!window.confirm('Terminate this session?')) return;
     try {
-      const res = await fetch('http://localhost:5000/api/session/end', {
+      const res = await fetch(apiUrl('/api/session/end'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -227,7 +228,7 @@ const AdminDashboard = () => {
     setCleanupLoading(true);
     setCleanupStatus('');
     try {
-      const res = await fetch('http://localhost:5000/api/admin/force-cleanup', {
+      const res = await fetch(apiUrl('/api/admin/force-cleanup'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -249,7 +250,7 @@ const AdminDashboard = () => {
     setCleanupLoading(true);
     setCleanupStatus('');
     try {
-      const res = await fetch('http://localhost:5000/api/admin/cleanup-all', {
+      const res = await fetch(apiUrl('/api/admin/cleanup-all'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clear_queue: true })
@@ -315,11 +316,11 @@ const AdminDashboard = () => {
         </h1>
         <div>
           <button
-            onClick={handleRefreshAll}
+            onClick={() => window.location.reload()}
             style={{
               backgroundColor: 'transparent',
               color: 'white',
-              border: '1px solid white',
+              border: '2px solid rgba(255,255,255,0.5)',
               padding: '8px 16px',
               borderRadius: '8px',
               cursor: 'pointer',
@@ -351,12 +352,6 @@ const AdminDashboard = () => {
           <button style={tabStyle('email')} onClick={() => setActiveTab('email')}>
             Email Config
           </button>
-          <button style={tabStyle('sessions')} onClick={() => setActiveTab('sessions')}>
-            Sessions
-          </button>
-          <button style={tabStyle('queue')} onClick={() => setActiveTab('queue')}>
-            Queue
-          </button>
           <button style={tabStyle('content')} onClick={() => setActiveTab('content')}>
             Chatbot Content
           </button>
@@ -371,6 +366,75 @@ const AdminDashboard = () => {
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
           padding: '24px'
         }}>
+
+          <div style={{
+    backgroundColor: '#fff7ed',
+    border: '1px solid #fed7aa',
+    borderRadius: '12px',
+    padding: '14px 20px',
+    marginBottom: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '10px'
+}}>
+    <div>
+        <div style={{ fontSize: '14px', fontWeight: '600',
+            color: '#c2410c', marginBottom: '2px' }}>
+             Session & Queue Cleanup
+        </div>
+        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+            Use if queue shows wrong numbers or users are stuck. 
+            Auto-cleans every 60 seconds.
+        </div>
+    </div>
+    <div style={{ display: 'flex', gap: '8px', 
+        alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+            onClick={handleSoftCleanup}
+            disabled={cleanupLoading}
+            style={{
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '600'
+            }}
+        >
+            {cleanupLoading ? 'Cleaning...' : 'Clean Stale Sessions'}
+        </button>
+        <button
+            onClick={handleForceCleanup}
+            disabled={cleanupLoading}
+            style={{
+                backgroundColor: '#ef4444',
+                color: 'white',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '600'
+            }}
+        >
+            {cleanupLoading ? 'Clearing...' : 'Force Clear Everything'}
+        </button>
+        {cleanupStatus && (
+            <span style={{
+                fontSize: '13px',
+                color: cleanupStatus.includes('?') 
+                    ? '#ef4444' : '#16a34a',
+                fontWeight: '600'
+            }}>
+                {cleanupStatus}
+            </span>
+        )}
+    </div>
+</div>
 
           {activeTab === 'email' && (
             <div>
@@ -438,223 +502,6 @@ const AdminDashboard = () => {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {activeTab === 'sessions' && (
-            <div>
-              <h2 style={{ color: '#1e3a5f', marginTop: 0 }}>
-                Active Sessions ({sessions.filter(s => s.status === 'active').length} active)
-              </h2>
-
-              {/* Service availability toggle - keep existing */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: serviceAvailable ? '#f0fdf4' : '#fef2f2',
-                border: `1px solid ${serviceAvailable ? '#bbf7d0' : '#fecaca'}`,
-                borderRadius: '12px',
-                padding: '16px 20px',
-                marginBottom: '16px'
-              }}>
-                <div>
-                  <div style={{
-                    fontSize: '15px', fontWeight: '600',
-                    color: serviceAvailable ? '#16a34a' : '#dc2626'
-                  }}>
-                    {serviceAvailable ? '🟢 Chatbot is Online' : '🔴 Chatbot is Offline'}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-                    {serviceAvailable
-                      ? 'Users can currently access the chatbot.'
-                      : 'Chatbot is disabled. Users will see an offline message.'}
-                  </div>
-                </div>
-                <button
-                  onClick={handleToggleService}
-                  disabled={serviceToggling}
-                  style={{
-                    backgroundColor: serviceAvailable ? '#ef4444' : '#16a34a',
-                    color: 'white', border: 'none',
-                    padding: '10px 24px', borderRadius: '8px',
-                    cursor: 'pointer', fontSize: '14px', fontWeight: '600'
-                  }}
-                >
-                  {serviceToggling ? 'Updating...' : serviceAvailable ? 'Take Offline' : 'Bring Online'}
-                </button>
-              </div>
-
-              {/* Cleanup card */}
-              <div style={{
-                backgroundColor: '#fff7ed',
-                border: '1px solid #fed7aa',
-                borderRadius: '12px',
-                padding: '16px 20px',
-                marginBottom: '16px'
-              }}>
-                <div style={{ fontSize: '15px', fontWeight: '600', color: '#c2410c', marginBottom: '4px' }}>
-                  🧹 Session & Queue Cleanup
-                </div>
-                <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '14px' }}>
-                  Use if queue shows wrong numbers or users are stuck. Auto-cleans every 60 seconds.
-                </div>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button onClick={handleSoftCleanup} disabled={cleanupLoading}
-                    style={{ backgroundColor: '#f59e0b', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
-                    {cleanupLoading ? 'Cleaning...' : '🧹 Clean Stale Sessions'}
-                  </button>
-                  <button onClick={handleForceCleanup} disabled={cleanupLoading}
-                    style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
-                    {cleanupLoading ? 'Clearing...' : '⚠️ Force Clear Everything'}
-                  </button>
-                  {cleanupStatus && (
-                    <span style={{ fontSize: '13px', color: cleanupStatus.includes('❌') ? '#ef4444' : '#16a34a', fontWeight: '600' }}>
-                      {cleanupStatus}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Toggle inactive sessions */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>
-                  🔴 Live — updates automatically
-                </span>
-                <button
-                  onClick={() => setShowInactiveSessions(prev => !prev)}
-                  style={{ padding: '6px 14px', backgroundColor: showInactiveSessions ? '#1e3a5f' : '#e2e8f0', color: showInactiveSessions ? 'white' : '#374151', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
-                >
-                  {showInactiveSessions ? 'Hide Inactive' : 'Show Inactive'}
-                </button>
-              </div>
-
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Session ID</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Last Active</th>
-                    <th style={thStyle}>Terminated Reason</th>
-                    <th style={thStyle}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions
-                    .filter(s => showInactiveSessions ? true : s.status === 'active')
-                    .length === 0 ? (
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#6b7280', fontSize: '14px' }}>
-                        {showInactiveSessions ? 'No sessions found' : 'No active sessions right now'}
-                      </td>
-                    </tr>
-                  ) : (
-                    sessions
-                      .filter(s => showInactiveSessions ? true : s.status === 'active')
-                      .map((s) => (
-                        <tr key={s.session_id}>
-                          <td style={tdStyle}>{s.session_id?.substring(0, 8)}...</td>
-                          <td style={tdStyle}>
-                            <span style={{
-                              padding: '2px 8px', borderRadius: '12px', fontSize: '12px',
-                              backgroundColor: s.status === 'active' ? '#dcfce7' : '#f3f4f6',
-                              color: s.status === 'active' ? '#16a34a' : '#6b7280'
-                            }}>
-                              {s.status}
-                            </span>
-                          </td>
-                          <td style={tdStyle}>
-                            {s.last_active ? new Date(s.last_active).toLocaleString() : '-'}
-                          </td>
-                          <td style={tdStyle}>{s.terminated_reason || '-'}</td>
-                          <td style={tdStyle}>
-                            {s.status === 'active' && (
-                              <button
-                                onClick={() => handleTerminateSession(s.session_id)}
-                                style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
-                              >
-                                Terminate
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {activeTab === 'queue' && (
-            <div>
-              <h2 style={{ color: '#1e3a5f', marginTop: 0 }}>
-                Queue ({queue.filter(q => q.status === 'waiting').length} waiting)
-              </h2>
-              <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '16px' }}>
-                Real-time queue. Updates automatically as users join or are admitted.
-              </p>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Position</th>
-                    <th style={thStyle}>Queue ID</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Joined At</th>
-                    <th style={thStyle}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queue.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" style={{
-                        textAlign: 'center', padding: '40px',
-                        color: '#6b7280', fontSize: '14px'
-                      }}>
-                        No one in queue
-                      </td>
-                    </tr>
-                  ) : (
-                    queue.map((q, index) => (
-                      <tr key={q.id}>
-                        <td style={tdStyle}>{index + 1}</td>
-                        <td style={tdStyle}>{q.queue_id?.substring(0, 8)}...</td>
-                        <td style={tdStyle}>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            backgroundColor: q.status === 'waiting' ? '#fef3c7' : '#dcfce7',
-                            color: q.status === 'waiting' ? '#d97706' : '#16a34a'
-                          }}>
-                            {q.status}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          {q.joined_at ? new Date(q.joined_at).toLocaleString() : '-'}
-                        </td>
-                        <td style={tdStyle}>
-                          <button
-                            onClick={async () => {
-                              await deleteDoc(doc(db, 'queue', q.id));
-                            }}
-                            style={{
-                              backgroundColor: '#ef4444',
-                              color: 'white',
-                              border: 'none',
-                              padding: '4px 12px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '12px'
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
                 </tbody>
               </table>
             </div>
@@ -1361,23 +1208,8 @@ const AdminDashboard = () => {
                 </ResponsiveContainer>
               </div>
 
-              {/* Bottom Row - Events and Termination */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                {/* Event Breakdown */}
-                <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0' }}>
-                  <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '16px', fontSize: '15px' }}>Event Breakdown</h3>
-                  {Object.entries(trafficData.eventCounts).length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>No events yet</div>
-                  ) : (
-                    Object.entries(trafficData.eventCounts).map(([event, count]) => (
-                      <div key={event} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
-                        <span style={{ fontSize: '13px', color: '#374151', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '6px' }}>{event}</span>
-                        <span style={{ fontSize: '14px', fontWeight: '700', color: '#1e3a5f' }}>{count}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-
+              {/* Bottom Row - Termination */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
                 {/* Termination Reasons */}
                 <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0' }}>
                   <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '16px', fontSize: '15px' }}>Session Termination Reasons</h3>
@@ -1406,4 +1238,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
