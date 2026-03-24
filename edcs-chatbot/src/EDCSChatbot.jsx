@@ -16,8 +16,30 @@ const EDCSChatbot = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  const [ticketData, setTicketData] = useState({ priority: 'Normal' });
-  const [meetingData, setMeetingData] = useState({});
+  const [userInfo, setUserInfo] = useState(null);
+  const [userForm, setUserForm] = useState({
+    name: '', email: '', phone: ''
+  });
+  const [userFormErrors, setUserFormErrors] = useState({});
+
+  const [ticketData, setTicketData] = useState({
+    name: userInfo?.name || '',
+    email: userInfo?.email || '',
+    phone: userInfo?.phone || '',
+    category: '',
+    priority: 'Normal',
+    description: ''
+  });
+  const [meetingData, setMeetingData] = useState({
+    name: userInfo?.name || '',
+    email: userInfo?.email || '',
+    phone: userInfo?.phone || '',
+    department: '',
+    purpose: '',
+    date: '',
+    time: '',
+    notes: ''
+  });
   const [checkTicketId, setCheckTicketId] = useState('');
 
   const [ticketErrors, setTicketErrors] = useState({});
@@ -32,6 +54,22 @@ const EDCSChatbot = () => {
   const sessionIdRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const cleanupIntervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!userInfo) return;
+    setTicketData(prev => ({
+      ...prev,
+      name: userInfo.name || '',
+      email: userInfo.email || '',
+      phone: userInfo.phone || '',
+    }));
+    setMeetingData(prev => ({
+      ...prev,
+      name: userInfo.name || '',
+      email: userInfo.email || '',
+      phone: userInfo.phone || '',
+    }));
+  }, [userInfo]);
 
   const [sessionTerminated, setSessionTerminated] = useState(false);
   const [queueState, setQueueState] = useState(null);
@@ -167,6 +205,7 @@ const EDCSChatbot = () => {
   };
 
   useEffect(() => {
+    if (!userInfo) return;
     if (isOpen && messages.length === 0) {
       const init = async () => {
         const queueId = generateUUID();
@@ -196,7 +235,10 @@ const EDCSChatbot = () => {
                   const randomWelcome = welcomeMessages[
                     Math.floor(Math.random() * welcomeMessages.length)
                   ];
-                  addBotMessage(`${greeting} ${randomWelcome}`, 'main');
+                  addBotMessage(
+                    `${greeting} ${userInfo.name}! ${randomWelcome}`,
+                    'main'
+                  );
 
                   const sessionRes = await fetch(
                     apiUrl('/api/session/start'),
@@ -245,7 +287,10 @@ const EDCSChatbot = () => {
 
           const greeting = getTimeBasedGreeting();
           const randomWelcome = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
-          addBotMessage(`${greeting} ${randomWelcome}`, 'main');
+          addBotMessage(
+            `${greeting} ${userInfo.name}! ${randomWelcome}`,
+            'main'
+          );
 
           const res = await fetch(apiUrl('/api/session/start'), {
             method: 'POST',
@@ -292,7 +337,7 @@ const EDCSChatbot = () => {
 
       init();
     }
-  }, [isOpen, messages.length]);
+  }, [isOpen, messages.length, userInfo]);
 
   const triggerConfetti = () => {
     setShowConfetti(true);
@@ -343,6 +388,8 @@ const EDCSChatbot = () => {
       headers: { 'Content-Type': 'application/json' },
     }).catch(err => console.error('Queue admit failed:', err));
     sessionIdRef.current = null;
+    setUserInfo(null);
+    setUserForm({ name: '', email: '', phone: '' });
     setSessionTerminated(false);
     setIsOpen(false);
     setIsMinimized(false);
@@ -1206,30 +1253,345 @@ const EDCSChatbot = () => {
     }
 
     return (
-      <div
-        style={{
+      !userInfo ? (
+        /* USER INFO FORM */
+        <div style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: '16px',
-          backgroundColor: '#f8fafc',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px',
-        }}
-      >
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            style={{
-              display: 'flex',
-              gap: '8px',
-              alignItems: 'flex-end',
-              justifyContent:
-                message.type === 'user' ? 'flex-end' : 'flex-start',
-              animation: 'fadeIn 0.3s ease',
-            }}
-          >
-            {message.type === 'bot' && (
+          justifyContent: 'center',
+          padding: '24px 20px',
+          backgroundColor: '#f8fafc'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '28px 24px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid #e2e8f0'
+          }}>
+            <div style={{
+              textAlign: 'center',
+              marginBottom: '24px'
+            }}>
+              <div style={{
+                width: '56px',
+                height: '56px',
+                backgroundColor: '#1e3a5f',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+                fontSize: '24px'
+              }}>
+                
+              </div>
+              <h3 style={{
+                margin: '0 0 4px',
+                color: '#1e3a5f',
+                fontSize: '16px',
+                fontWeight: '700'
+              }}>
+                Welcome to EDCS Support
+              </h3>
+              <p style={{
+                margin: 0,
+                color: '#64748b',
+                fontSize: '13px'
+              }}>
+                Please enter your details to start chatting
+              </p>
+            </div>
+
+            {/* Name field */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '6px'
+              }}>
+                Full Name *
+              </label>
+              <input
+                type="text"
+                placeholder="Enter your name"
+                value={userForm.name}
+                onChange={e => setUserForm(p => ({
+                  ...p, name: e.target.value
+                }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: userFormErrors.name
+                    ? '2px solid #ef4444'
+                    : '2px solid #e2e8f0',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  fontFamily: 'inherit'
+                }}
+              />
+              {userFormErrors.name && (
+                <p style={{
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  margin: '4px 0 0'
+                }}>
+                  {userFormErrors.name}
+                </p>
+              )}
+            </div>
+
+            {/* Email field */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '6px'
+              }}>
+                Email Address *
+              </label>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={userForm.email}
+                onChange={e => setUserForm(p => ({
+                  ...p, email: e.target.value
+                }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: userFormErrors.email
+                    ? '2px solid #ef4444'
+                    : '2px solid #e2e8f0',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  fontFamily: 'inherit'
+                }}
+              />
+              {userFormErrors.email && (
+                <p style={{
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  margin: '4px 0 0'
+                }}>
+                  {userFormErrors.email}
+                </p>
+              )}
+            </div>
+
+            {/* Phone field */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '6px'
+              }}>
+                Phone Number *
+              </label>
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center'
+              }}>
+                <div style={{
+                  padding: '10px 12px',
+                  backgroundColor: '#f1f5f9',
+                  borderRadius: '8px',
+                  border: '2px solid #e2e8f0',
+                  fontSize: '14px',
+                  color: '#374151',
+                  whiteSpace: 'nowrap'
+                }}>
+                   +91
+                </div>
+                <input
+                  type="tel"
+                  placeholder="Enter phone number"
+                  value={userForm.phone}
+                  onChange={e => setUserForm(p => ({
+                    ...p, phone: e.target.value
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: userFormErrors.phone
+                      ? '2px solid #ef4444'
+                      : '2px solid #e2e8f0',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    fontFamily: 'inherit'
+                  }}
+                />
+              </div>
+              {userFormErrors.phone && (
+                <p style={{
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  margin: '4px 0 0'
+                }}>
+                  {userFormErrors.phone}
+                </p>
+              )}
+            </div>
+
+            {/* Start Chat Button */}
+            <button
+              onClick={() => {
+                const errors = {};
+                if (!userForm.name.trim()) {
+                  errors.name = 'Name is required';
+                }
+                if (!userForm.email.trim()) {
+                  errors.email = 'Email is required';
+                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                  userForm.email
+                )) {
+                  errors.email = 'Enter a valid email address';
+                }
+                if (!userForm.phone.trim()) {
+                  errors.phone = 'Phone number is required';
+                } else if (!/^\d{10}$/.test(
+                  userForm.phone.replace(/\s/g, '')
+                )) {
+                  errors.phone = 'Enter a valid 10-digit phone number';
+                }
+                if (Object.keys(errors).length > 0) {
+                  setUserFormErrors(errors);
+                  return;
+                }
+                setUserFormErrors({});
+                setUserInfo({
+                  name: userForm.name.trim(),
+                  email: userForm.email.trim(),
+                  phone: userForm.phone.trim()
+                });
+              }}
+              style={{
+                width: '100%',
+                padding: '13px',
+                backgroundColor: '#1e3a5f',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '15px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              ➤ Start Chat
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* EXISTING CHAT CONTENT GOES HERE */
+        /* wrap all the existing chat messages and options JSX 
+           inside this else block */
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '16px',
+            backgroundColor: '#f8fafc',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}
+        >
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'flex-end',
+                justifyContent:
+                  message.type === 'user' ? 'flex-end' : 'flex-start',
+                animation: 'fadeIn 0.3s ease',
+              }}
+            >
+              {message.type === 'bot' && (
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ef5b6c',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Bot size={18} />
+                </div>
+              )}
+              <div
+                style={{
+                  maxWidth: '70%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  whiteSpace: 'pre-line',
+                  fontSize: '14px',
+                  lineHeight: '1.5',
+                  ...(message.type === 'user'
+                    ? {
+                      background:
+                        'linear-gradient(135deg, #ef5b6c 0%, #d94456 100%)',
+                      color: 'white',
+                      borderBottomRightRadius: '4px',
+                      fontWeight: '500',
+                    }
+                    : {
+                      backgroundColor: 'white',
+                      color: '#1f2937',
+                      boxShadow: '0 2px 4px rgba(30, 58, 95, 0.1)',
+                      borderBottomLeftRadius: '4px',
+                      border: '1px solid #e2e8f0',
+                    }),
+                }}
+              >
+                {message.text}
+              </div>
+              {message.type === 'user' && (
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: '#1e3a5f',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <User size={18} />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isTyping && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
               <div
                 style={{
                   width: '32px',
@@ -1240,99 +1602,35 @@ const EDCSChatbot = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0,
                 }}
               >
                 <Bot size={18} />
               </div>
-            )}
+              <TypingIndicator />
+            </div>
+          )}
+
+          {messages.length > 0 &&
+            messages[messages.length - 1].type === 'bot' &&
+            renderOptions()}
+
+          {sessionTerminated && (
             <div
               style={{
-                maxWidth: '70%',
-                padding: '12px',
-                borderRadius: '12px',
-                whiteSpace: 'pre-line',
-                fontSize: '14px',
-                lineHeight: '1.5',
-                ...(message.type === 'user'
-                  ? {
-                    background:
-                      'linear-gradient(135deg, #ef5b6c 0%, #d94456 100%)',
-                    color: 'white',
-                    borderBottomRightRadius: '4px',
-                    fontWeight: '500',
-                  }
-                  : {
-                    backgroundColor: 'white',
-                    color: '#1f2937',
-                    boxShadow: '0 2px 4px rgba(30, 58, 95, 0.1)',
-                    borderBottomLeftRadius: '4px',
-                    border: '1px solid #e2e8f0',
-                  }),
+                marginTop: '12px',
+                textAlign: 'center',
+                color: '#dc2626',
+                fontSize: '13px',
+                fontWeight: '500',
               }}
             >
-              {message.text}
+              Session ended. Please close and reopen the chat.
             </div>
-            {message.type === 'user' && (
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: '#1e3a5f',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <User size={18} />
-              </div>
-            )}
-          </div>
-        ))}
+          )}
 
-        {isTyping && (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                backgroundColor: '#ef5b6c',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Bot size={18} />
-            </div>
-            <TypingIndicator />
-          </div>
-        )}
-
-        {messages.length > 0 &&
-          messages[messages.length - 1].type === 'bot' &&
-          renderOptions()}
-
-        {sessionTerminated && (
-          <div
-            style={{
-              marginTop: '12px',
-              textAlign: 'center',
-              color: '#dc2626',
-              fontSize: '13px',
-              fontWeight: '500',
-            }}
-          >
-            Session ended. Please close and reopen the chat.
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
+          <div ref={messagesEndRef} />
+        </div>
+      )
     );
   };
 
