@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 # Timezone for India Standard Time
@@ -192,3 +192,248 @@ if __name__ == "__main__":
     stats = get_statistics()
     print(f"Current statistics: {stats}")
     print("="*50 + "\n")
+
+
+def get_email_config():
+    docs = db.collection('email_config').stream()
+    config = {}
+    for doc in docs:
+        data = doc.to_dict()
+        config[data['department_name']] = data['email_id']
+    return config
+
+
+def save_email_config(department_name, email_id):
+    db.collection('email_config').document(department_name).set({
+        'department_name': department_name,
+        'email_id': email_id
+    })
+
+
+def initialize_email_config():
+    docs = list(db.collection('email_config').limit(1).stream())
+    if len(docs) == 0:
+        save_email_config('HR Department', 'blessysharon.work@gmail.com')
+        save_email_config('Accounts', 'blessysharon.work@gmail.com')
+        save_email_config('Oracle DBA', 'blessysharon.work@gmail.com')
+        save_email_config('SAP', 'blessysharon.work@gmail.com')
+
+
+initialize_email_config()
+
+
+def create_session(session_id):
+    """Create a new chat session document."""
+    sessions_ref = db.collection('sessions')
+    now = get_ist_now()
+    sessions_ref.document(session_id).set({
+        'session_id': session_id,
+        'status': 'active',
+        'last_active': now,
+        'created_at': now,
+        'query_history': [],
+        'terminated_reason': None,
+    })
+
+
+def ping_session(session_id):
+    try:
+        sessions_ref = db.collection('sessions')
+        docs = list(sessions_ref.where(
+            filter=firestore.FieldFilter('session_id', '==', session_id)
+        ).limit(1).stream())
+
+        if not docs:
+            return False
+
+        doc = docs[0]
+        data = doc.to_dict()
+
+        if data.get('status') != 'active':
+            return False
+
+        doc.reference.update({'last_active': get_ist_now()})
+        return True
+    except Exception as e:
+        print(f"Error in ping_session: {e}")
+        return False
+
+
+def end_session(session_id, reason):
+    """Mark a session as inactive with a termination reason."""
+    try:
+        sessions_ref = db.collection('sessions')
+        docs = sessions_ref.where('session_id', '==', session_id).limit(1).stream()
+        doc = next(docs, None)
+        if not doc:
+            return
+        doc.reference.update({
+            'status': 'inactive',
+            'terminated_reason': reason,
+            'last_active': get_ist_now(),
+        })
+    except Exception as e:
+        print(f"❌ Error in end_session for {session_id}: {e}")
+
+
+def cleanup_stale_sessions():
+    try:
+        sessions_ref = db.collection('sessions')
+        active_docs = list(sessions_ref.where(
+            filter=firestore.FieldFilter('status', '==', 'active')
+        ).stream())
+
+        terminated = []
+        now = datetime.now(timezone.utc)
+
+        for doc in active_docs:
+            data = doc.to_dict()
+            last_active = data.get('last_active')
+            if not last_active:
+                continue
+            if isinstance(last_active, str):
+                try:
+                    last_active = datetime.fromisoformat(last_active)
+                    if last_active.tzinfo is None:
+                        last_active = last_active.replace(tzinfo=timezone.utc)
+                except:
+                    continue
+            elif hasattr(last_active, 'timestamp'):
+                last_active = datetime.fromtimestamp(
+                    last_active.timestamp(), tz=timezone.utc
+                )
+
+            if (now - last_active).total_seconds() > 60:
+                session_id = data.get('session_id')
+                end_session(session_id, "timeout")
+                terminated.append(session_id)
+                # admit next from queue
+                try:
+                    admit_next_from_queue()
+                except Exception as e:
+                    print(f"Error admitting from queue after timeout: {e}")
+
+        return terminated
+    except Exception as e:
+        print(f"Error in cleanup_stale_sessions: {e}")
+        return []
+
+
+def log_event(event_type, session_id, details):
+    """Write an event log document."""
+    try:
+        logs_ref = db.collection('logs')
+        logs_ref.add({
+            'event_type': event_type,
+            'session_id': session_id,
+            'details': details or {},
+            'timestamp': get_ist_now(),
+        })
+    except Exception as e:
+        print(f"❌ Error in log_event ({event_type}, {session_id}): {e}")
+
+
+def get_active_session_count():
+    docs = list(db.collection('sessions').where(
+        filter=firestore.FieldFilter('status', '==', 'active')
+    ).stream())
+    return len(docs)
+
+
+def get_max_sessions():
+    doc = db.collection('chatbot_config').document('settings').get()
+    if doc.exists:
+        return doc.to_dict().get('max_sessions', 50)
+    else:
+        db.collection('chatbot_config').document('settings').set({'max_sessions': 50})
+        return 50
+
+
+def add_to_queue(queue_id):
+    db.collection('queue').document(queue_id).set({
+        'queue_id': queue_id,
+        'status': 'waiting',
+        'joined_at': get_ist_now()
+    })
+
+
+def get_queue_position(queue_id):
+    try:
+        this_doc = db.collection('queue').document(queue_id).get()
+        if not this_doc.exists:
+            return 0
+        this_joined = this_doc.to_dict().get('joined_at')
+        all_waiting = list(db.collection('queue').where(
+            filter=firestore.FieldFilter('status', '==', 'waiting')
+        ).stream())
+        position = sum(
+            1 for d in all_waiting
+            if d.to_dict().get('joined_at') <= this_joined
+        )
+        return position
+    except Exception as e:
+        print(f"Error getting queue position: {e}")
+        return 0
+
+
+def admit_next_from_queue():
+    try:
+        docs = list(db.collection('queue').where(
+            filter=firestore.FieldFilter('status', '==', 'waiting')
+        ).order_by('joined_at').limit(1).stream())
+        if not docs:
+            return None
+        doc = docs[0]
+        doc.reference.update({'status': 'admitted'})
+        return doc.to_dict().get('queue_id')
+    except Exception as e:
+        print(f"Error admitting from queue: {e}")
+        return None
+
+
+def remove_from_queue(queue_id):
+    try:
+        db.collection('queue').document(queue_id).delete()
+    except Exception as e:
+        print(f"Error removing from queue: {e}")
+
+
+def check_and_record_query(session_id, query):
+    try:
+        sessions_ref = db.collection('sessions')
+        docs = list(sessions_ref.where(
+            filter=firestore.FieldFilter('session_id', '==', session_id)
+        ).limit(1).stream())
+        
+        if not docs:
+            return {"terminated": False}
+        
+        doc_ref = docs[0].reference
+        
+        @firestore.transactional
+        def update_in_transaction(transaction, doc_ref, query):
+            snapshot = doc_ref.get(transaction=transaction)
+            data = snapshot.to_dict()
+            query_history = data.get('query_history', [])
+            
+            count = sum(1 for q in query_history if q.lower() == query.lower())
+            print(f"Transaction: query={query}, count={count}, history={query_history}")
+            
+            if count >= 3:
+                transaction.update(doc_ref, {
+                    'status': 'inactive',
+                    'terminated_reason': 'repetition'
+                })
+                return True
+            
+            query_history.append(query)
+            transaction.update(doc_ref, {'query_history': query_history})
+            return False
+        
+        transaction = db.transaction()
+        terminated = update_in_transaction(transaction, doc_ref, query)
+        return {"terminated": terminated}
+        
+    except Exception as e:
+        print(f"Error in check_and_record_query: {e}")
+        return {"terminated": False}

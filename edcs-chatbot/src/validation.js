@@ -1,49 +1,107 @@
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const phoneRegex = /^\d{10}$/;
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^\+?[0-9]{7,15}$/; // 7–15 digits, optional +
-
-export const validateTicket = (data) => {
+export function validateTicket(data = {}) {
+  console.log('validateTicket called with:', data);
   const errors = {};
-  if (!data.name?.trim()) errors.name = 'Name is required';
-  if (!data.email?.trim()) errors.email = 'Email is required';
-  else if (!emailRegex.test(data.email)) errors.email = 'Enter a valid email address';
 
-  if (data.phone && data.phone.trim() && !phoneRegex.test(data.phone)) {
-    errors.phone = 'Enter a valid phone number';
+  if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
+    errors.name = 'Name is required.';
   }
 
-  if (!data.category) errors.category = 'Category is required';
-  if (!data.description?.trim()) errors.description = 'Question is required';
+  if (!data.email || typeof data.email !== 'string' || data.email.trim() === '') {
+    errors.email = 'Email is required.';
+  } else if (!emailRegex.test(data.email.trim())) {
+    errors.email = 'Please enter a valid email address.';
+  }
 
+  if (!data.category || typeof data.category !== 'string' || data.category.trim() === '') {
+    errors.category = 'Category is required.';
+  }
+
+  if (!data.department) {
+    errors.department = 'Please select a department';
+  }
+
+  if (!data.description || typeof data.description !== 'string' || data.description.trim().length < 10) {
+    errors.description = 'Description must be at least 10 characters.';
+  }
+
+  if (data.phone && String(data.phone).trim() !== '') {
+    const phoneStr = String(data.phone).trim();
+    if (!phoneRegex.test(phoneStr)) {
+      errors.phone = 'Phone must be exactly 10 digits.';
+    }
+  }
+
+  console.log('errors found:', errors);
   return errors;
-};
+}
 
-export const validateMeeting = (data) => {
+export function validateMeeting(data = {}) {
+  console.log('validateMeeting called with:', data);
   const errors = {};
-  if (!data.name?.trim()) errors.name = 'Name is required';
-  if (!data.email?.trim()) errors.email = 'Email is required';
-  else if (!emailRegex.test(data.email)) errors.email = 'Enter a valid email address';
 
-  if (!data.phone?.trim()) errors.phone = 'Phone number is required';
-  else if (!phoneRegex.test(data.phone)) errors.phone = 'Enter a valid phone number';
-
-  if (!data.purpose) errors.purpose = 'Meeting purpose is required';
-
-  if (!data.date) errors.date = 'Preferred date is required';
-  else if (new Date(data.date) < new Date(new Date().toDateString())) {
-    errors.date = 'Date cannot be in the past';
+  if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
+    errors.name = 'Name is required.';
   }
 
-  if (!data.time) errors.time = 'Please select a preferred time slot';
+  if (!data.email || typeof data.email !== 'string' || data.email.trim() === '') {
+    errors.email = 'Email is required.';
+  } else if (!emailRegex.test(data.email.trim())) {
+    errors.email = 'Please enter a valid email address.';
+  }
 
+  const phoneStr = data.phone != null ? String(data.phone).trim() : '';
+  if (phoneStr === '') {
+    errors.phone = 'Phone is required.';
+  } else if (!phoneRegex.test(phoneStr)) {
+    errors.phone = 'Phone must be exactly 10 digits.';
+  }
+
+  if (!data.purpose || typeof data.purpose !== 'string' || data.purpose.trim() === '') {
+    errors.purpose = 'Purpose is required.';
+  }
+
+  if (!data.department) {
+    errors.department = 'Please select a department';
+  }
+
+  if (!data.date || typeof data.date !== 'string' || data.date.trim() === '') {
+    errors.date = 'Date is required.';
+  } else {
+    const inputDate = new Date(data.date);
+    const today = new Date();
+    // Normalize to date-only comparison
+    const inputOnly = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (!(inputDate instanceof Date) || isNaN(inputDate.getTime())) {
+      errors.date = 'Please enter a valid date.';
+    } else if (inputOnly <= todayOnly) {
+      errors.date = 'Date must be in the future.';
+    }
+  }
+
+  if (!data.time || typeof data.time !== 'string' || data.time.trim() === '') {
+    errors.time = 'Time is required.';
+  }
+
+  console.log('errors found:', errors);
   return errors;
-};
+}
 
-export const validateTicketId = (ticketId) => {
-  if (!ticketId.trim()) return 'Ticket ID is required';
-  const ticketIdRegex = /^EDCS-\d{8}-\d{4}$/;
-  if (!ticketIdRegex.test(ticketId)) {
-    return 'Ticket ID must be in format EDCS-YYYYMMDD-XXXX';
+export function validateTicketId(id) {
+  if (!id || typeof id !== 'string') {
+    return 'Ticket ID is required.';
   }
-  return '';
-};
+
+  const trimmed = id.trim();
+  const pattern = /^EDCS-\d{8}-\d{4}$/;
+
+  if (!pattern.test(trimmed)) {
+    return 'Ticket ID must be in the format EDCS-YYYYMMDD-XXXX.';
+  }
+
+  return null;
+}

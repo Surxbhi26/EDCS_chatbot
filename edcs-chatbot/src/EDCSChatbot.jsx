@@ -1,7 +1,11 @@
+// EDCSChatbot.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Home, Minus, Bot, User, Calendar, Ticket } from 'lucide-react';
 import { chatbotData, answers } from './chatbotData';
 import { validateTicket, validateMeeting, validateTicketId } from './validation';
+import { apiUrl } from './apiBase';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 const EDCSChatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -12,8 +16,30 @@ const EDCSChatbot = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  const [ticketData, setTicketData] = useState({ priority: 'Normal' });
-  const [meetingData, setMeetingData] = useState({});
+  const [userInfo, setUserInfo] = useState(null);
+  const [userForm, setUserForm] = useState({
+    name: '', email: '', phone: ''
+  });
+  const [userFormErrors, setUserFormErrors] = useState({});
+
+  const [ticketData, setTicketData] = useState({
+    name: userInfo?.name || '',
+    email: userInfo?.email || '',
+    phone: userInfo?.phone || '',
+    category: '',
+    priority: 'Normal',
+    description: ''
+  });
+  const [meetingData, setMeetingData] = useState({
+    name: userInfo?.name || '',
+    email: userInfo?.email || '',
+    phone: userInfo?.phone || '',
+    department: '',
+    purpose: '',
+    date: '',
+    time: '',
+    notes: ''
+  });
   const [checkTicketId, setCheckTicketId] = useState('');
 
   const [ticketErrors, setTicketErrors] = useState({});
@@ -25,6 +51,31 @@ const EDCSChatbot = () => {
   const [answeredOptions, setAnsweredOptions] = useState([]);
 
   const messagesEndRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  const pingIntervalRef = useRef(null);
+  const cleanupIntervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!userInfo) return;
+    setTicketData(prev => ({
+      ...prev,
+      name: userInfo.name || '',
+      email: userInfo.email || '',
+      phone: userInfo.phone || '',
+    }));
+    setMeetingData(prev => ({
+      ...prev,
+      name: userInfo.name || '',
+      email: userInfo.email || '',
+      phone: userInfo.phone || '',
+    }));
+  }, [userInfo]);
+
+  const [sessionTerminated, setSessionTerminated] = useState(false);
+  const [queueState, setQueueState] = useState(null);
+  const queuePollRef = useRef(null);
+  const queueIdRef = useRef(null);
+  const [chatbotContent, setChatbotContent] = useState(null);
 
   // HYBRID SCROLL 
   const scrollToBottom = () => {
@@ -47,12 +98,97 @@ const EDCSChatbot = () => {
     return () => clearTimeout(timer);
   }, [messages]);
 
-  const welcomeMessages = [
-    "Hello! Welcome to EDCS (Expora Database Consulting Pvt. Ltd India). How can I help you today?",
-    "Hi there! Welcome to EDCS! What can I assist you with today?",
-    "Greetings! EDCS here, ready to help you. What would you like to know?",
-    "Welcome to EDCS! We're excited to help you today. What brings you here?",
-  ];
+  useEffect(() => {
+    fetch(apiUrl('/api/chatbot-content'))
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.content) {
+          setChatbotContent(data.content);
+        }
+      })
+      .catch(err => console.error('Failed to load chatbot content:', err));
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch(apiUrl('/api/service-status'))
+        .then(res => res.json())
+        .then(data => {
+          if (data.available === false) {
+            setSessionTerminated(true);
+            addBotMessage(
+              'Sorry, our chatbot is currently offline for maintenance. Please try again later.'
+            );
+          }
+        })
+        .catch(err => console.error('Error checking service status:', err));
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionIdRef.current) {
+        const payload = JSON.stringify({
+          session_id: sessionIdRef.current,
+          reason: 'browser_closed'
+        });
+        navigator.sendBeacon(
+          apiUrl('/api/session/end'),
+          new Blob([payload], { type: 'application/json' })
+        );
+        sessionIdRef.current = null;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    let hiddenTimer = null;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        hiddenTimer = setTimeout(() => {
+          if (sessionIdRef.current) {
+            fetch(apiUrl('/api/session/end'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                session_id: sessionIdRef.current,
+                reason: 'tab_hidden_timeout'
+              })
+            }).catch(err => console.error('Error ending hidden session:', err));
+            handleSessionTerminated();
+          }
+        }, 5 * 60 * 1000); // 5 minutes
+      } else {
+        if (hiddenTimer) {
+          clearTimeout(hiddenTimer);
+          hiddenTimer = null;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (hiddenTimer) clearTimeout(hiddenTimer);
+    };
+  }, []);
+
+  const activeChatbotData = (chatbotContent && chatbotContent.menus)
+    ? chatbotContent.menus
+    : chatbotData;
+
+  const activeAnswers = (chatbotContent && chatbotContent.answers)
+    ? chatbotContent.answers
+    : answers;
+
+  const welcomeMessages = (chatbotContent && chatbotContent.welcomeMessages)
+    ? chatbotContent.welcomeMessages
+    : ["I'm EVA, your EDCS assistant! How can I help you today!"];
 
   const getTimeBasedGreeting = () => {
     const hour = new Date().getHours();
@@ -61,20 +197,200 @@ const EDCSChatbot = () => {
     return "Good evening! 🌙";
   };
 
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   useEffect(() => {
+    if (!userInfo) return;
     if (isOpen && messages.length === 0) {
-      const greeting = getTimeBasedGreeting();
-      const randomWelcome = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
-      addBotMessage(`${greeting} ${randomWelcome}`, 'main');
+      const init = async () => {
+        const queueId = generateUUID();
+        queueIdRef.current = queueId;
+
+        try {
+          const queueRes = await fetch(apiUrl('/api/queue/check'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ queue_id: queueId }),
+          });
+          const queueData = await queueRes.json();
+
+          if (queueData.queued) {
+            setQueueState({ position: queueData.position, queue_id: queueId });
+            queuePollRef.current = setInterval(async () => {
+              try {
+                const statusRes = await fetch(
+                  apiUrl(`/api/queue/status/${queueId}`)
+                );
+                const statusData = await statusRes.json();
+                if (statusData.admitted) {
+                  clearInterval(queuePollRef.current);
+                  setQueueState(null);
+
+                  const greeting = getTimeBasedGreeting();
+                  const randomWelcome = welcomeMessages[
+                    Math.floor(Math.random() * welcomeMessages.length)
+                  ];
+                  addBotMessage(
+                    `${greeting} ${userInfo.name}! ${randomWelcome}`,
+                    'main'
+                  );
+
+                  const sessionRes = await fetch(
+                    apiUrl('/api/session/start'),
+                    { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+                  );
+                  const sessionData = await sessionRes.json();
+                  if (sessionData.success) {
+                    sessionIdRef.current = sessionData.session_id;
+                    pingIntervalRef.current = setInterval(async () => {
+                      if (!sessionIdRef.current) return;
+                      try {
+                        const pingRes = await fetch(
+                          apiUrl('/api/session/ping'),
+                          {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ session_id: sessionIdRef.current }),
+                          }
+                        );
+                    const pingData = await pingRes.json();
+                    if (pingData.terminated) handleSessionTerminated();
+                  } catch (err) {
+                    console.error('Ping failed:', err);
+                  }
+                }, 30000);
+                cleanupIntervalRef.current = setInterval(async () => {
+                  try {
+                    await fetch(apiUrl('/api/session/cleanup'), {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                    });
+                  } catch (err) {
+                    console.error('Cleanup failed:', err);
+                  }
+                }, 60000);
+                  }
+                } else {
+                  setQueueState(prev => ({ ...prev, position: statusData.position }));
+                }
+              } catch (err) {
+                console.error('Queue poll failed:', err);
+              }
+            }, 10000);
+            return;
+          }
+
+          const greeting = getTimeBasedGreeting();
+          const randomWelcome = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+          addBotMessage(
+            `${greeting} ${userInfo.name}! ${randomWelcome}`,
+            'main'
+          );
+
+          const res = await fetch(apiUrl('/api/session/start'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const data = await res.json();
+          if (!data.success || !data.session_id) {
+            console.error('Failed to start session', data);
+            return;
+          }
+          sessionIdRef.current = data.session_id;
+
+          pingIntervalRef.current = setInterval(async () => {
+            if (!sessionIdRef.current) return;
+            try {
+              const pingRes = await fetch(apiUrl('/api/session/ping'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionIdRef.current }),
+              });
+              const pingData = await pingRes.json();
+              if (pingData.terminated) {
+                handleSessionTerminated();
+              }
+            } catch (err) {
+              console.error('Session ping failed:', err);
+            }
+          }, 30000);
+
+          cleanupIntervalRef.current = setInterval(async () => {
+            try {
+              await fetch(apiUrl('/api/session/cleanup'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+              });
+            } catch (err) {
+              console.error('Session cleanup failed:', err);
+            }
+          }, 60000);
+        } catch (err) {
+          console.error('Error initializing session/queue:', err);
+        }
+      };
+
+      init();
     }
-  }, [isOpen]);
+  }, [isOpen, messages.length, userInfo]);
 
   const triggerConfetti = () => {
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), 3000);
   };
 
+  const handleSessionTerminated = () => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+    }
+    if (cleanupIntervalRef.current) {
+      clearInterval(cleanupIntervalRef.current);
+    }
+    if (queuePollRef.current) {
+      clearInterval(queuePollRef.current);
+    }
+    setSessionTerminated(true);
+    setCurrentMenu(null);
+    addBotMessage(
+      "Your session has ended due to inactivity. Please close and reopen the chat to start again."
+    );
+  };
+
   const handleClose = () => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+    }
+    if (cleanupIntervalRef.current) {
+      clearInterval(cleanupIntervalRef.current);
+    }
+    if (queuePollRef.current) {
+      clearInterval(queuePollRef.current);
+    }
+    if (sessionIdRef.current) {
+      fetch(apiUrl('/api/session/end'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionIdRef.current,
+          reason: 'user_closed',
+        }),
+      }).catch((err) => {
+        console.error('Error ending session:', err);
+      });
+    }
+    fetch(apiUrl('/api/queue/admit'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(err => console.error('Queue admit failed:', err));
+    sessionIdRef.current = null;
+    setUserInfo(null);
+    setUserForm({ name: '', email: '', phone: '' });
+    setSessionTerminated(false);
     setIsOpen(false);
     setIsMinimized(false);
     setTimeout(() => {
@@ -119,7 +435,28 @@ const EDCSChatbot = () => {
   };
 
   // ---------- OPTION CLICK ----------
-  const handleOptionClick = (option) => {
+  const handleOptionClick = async (option) => {
+    if (sessionIdRef.current) {
+      try {
+        console.log('handleOptionClick called, sessionId:', sessionIdRef.current, 'query:', option.text);
+        const res = await fetch(apiUrl('/api/session/check-repeat'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionIdRef.current,
+            query: option.text,
+          }),
+        });
+        const data = await res.json();
+        if (data.terminated) {
+          handleSessionTerminated();
+          return;
+        }
+      } catch (err) {
+        console.error('Repeat check failed:', err);
+      }
+    }
+
     addUserMessage(option.text);
 
     if (option.action === 'ticket') {
@@ -131,7 +468,7 @@ const EDCSChatbot = () => {
     } else if (option.action === 'menu') {
       setTimeout(() => {
         setCurrentMenu(option.id);
-        addBotMessage(chatbotData[option.id].message, option.id);
+        addBotMessage(activeChatbotData[option.id].message, option.id);
       }, 300);
     } else if (option.action === 'answer') {
       const isMainMenuAnswer = currentMenu === 'main';
@@ -139,7 +476,7 @@ const EDCSChatbot = () => {
         prev.includes(option.id) ? prev : [...prev, option.id]
       );
       setTimeout(() => {
-        addBotMessage(answers[option.id], isMainMenuAnswer ? 'answered' : currentMenu);
+        addBotMessage(activeAnswers[option.id], isMainMenuAnswer ? 'answered' : currentMenu);
       }, 300);
     }
   };
@@ -154,7 +491,7 @@ const EDCSChatbot = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/ticket', {
+      const response = await fetch(apiUrl('/api/ticket'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ticketData),
@@ -164,6 +501,21 @@ const EDCSChatbot = () => {
 
       if (result.success) {
         setTicketData(prev => ({ ...prev, ticketId: result.ticket_id }));
+        try {
+          await fetch(apiUrl('/api/department-email'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              department: ticketData.department,
+              sender_name: ticketData.name,
+              sender_email: ticketData.email,
+              subject: 'New Query - ' + ticketData.category,
+              message: ticketData.description
+            })
+          });
+        } catch (err) {
+          console.error('Department email failed:', err);
+        }
         setCurrentView('ticketSuccess');
         triggerConfetti();
         setTicketErrors({});
@@ -187,7 +539,7 @@ const EDCSChatbot = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/meeting', {
+      const response = await fetch(apiUrl('/api/meeting'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(meetingData),
@@ -197,6 +549,21 @@ const EDCSChatbot = () => {
 
       if (result.success) {
         setMeetingData(prev => ({ ...prev, meetingId: result.meeting_id }));
+        try {
+          await fetch(apiUrl('/api/department-email'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              department: meetingData.department,
+              sender_name: meetingData.name,
+              sender_email: meetingData.email,
+              subject: 'New Meeting Request - ' + meetingData.purpose,
+              message: meetingData.notes || ''
+            })
+          });
+        } catch (err) {
+          console.error('Department email failed:', err);
+        }
         setCurrentView('meetingSuccess');
         triggerConfetti();
         setMeetingErrors({});
@@ -218,7 +585,7 @@ const EDCSChatbot = () => {
       return;
     }
     try {
-      const response = await fetch(`http://localhost:5000/api/ticket/${checkTicketId}`);
+      const response = await fetch(apiUrl(`/api/ticket/${checkTicketId}`));
       const result = await response.json();
       if (result.success) {
         const ticket = result.ticket;
@@ -285,9 +652,10 @@ const EDCSChatbot = () => {
 
   // ---------- OPTIONS (menus) ----------
   const renderOptions = () => {
-    if (!currentMenu || !chatbotData[currentMenu] || isTyping || currentMenu === 'answered') return null;
+    if (sessionTerminated) return null;
+    if (!currentMenu || !activeChatbotData[currentMenu] || isTyping || currentMenu === 'answered') return null;
 
-    const currentData = chatbotData[currentMenu];
+    const currentData = activeChatbotData[currentMenu];
     const showTicketPrompt = currentMenu === 'main_with_ticket';
 
     if (showTicketPrompt) {
@@ -442,6 +810,24 @@ const EDCSChatbot = () => {
                 <option value="Other">Other</option>
               </select>
               {ticketErrors.category && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.category}</p>}
+            </div>
+            {/* department */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+                Department *
+              </label>
+              <select
+                style={inputStyle}
+                value={ticketData.department || ''}
+                onChange={(e) => setTicketData(prev => ({ ...prev, department: e.target.value }))}
+              >
+                <option value="">Select</option>
+                <option value="HR Department">HR Department</option>
+                <option value="Accounts">Accounts</option>
+                <option value="Oracle DBA">Oracle DBA</option>
+                <option value="SAP">SAP</option>
+              </select>
+              {ticketErrors.department && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.department}</p>}
             </div>
             {/* priority */}
             <div style={{ marginBottom: '12px' }}>
@@ -622,17 +1008,45 @@ const EDCSChatbot = () => {
               </select>
               {meetingErrors.purpose && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.purpose}</p>}
             </div>
+            {/* department */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+                Department *
+              </label>
+              <select
+                style={inputStyle}
+                value={meetingData.department || ''}
+                onChange={(e) => setMeetingData(prev => ({ ...prev, department: e.target.value }))}
+              >
+                <option value="">Select</option>
+                <option value="HR Department">HR Department</option>
+                <option value="Accounts">Accounts</option>
+                <option value="Oracle DBA">Oracle DBA</option>
+                <option value="SAP">SAP</option>
+              </select>
+              {meetingErrors.department && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.department}</p>}
+            </div>
             {/* date */}
             <div style={{ marginBottom: '12px' }}>
               <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
                 Preferred Date *
               </label>
-              <input
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                style={inputStyle}
-                value={meetingData.date || ''}
-                onChange={(e) => setMeetingData(prev => ({ ...prev, date: e.target.value }))}
+              <DatePicker
+                selected={meetingData.date ? new Date(meetingData.date) : null}
+                onChange={(date) => {
+                  const formatted = date ? date.toISOString().split('T')[0] : '';
+                  setMeetingData(prev => ({ ...prev, date: formatted }));
+                  if (meetingErrors.date) setMeetingErrors(prev => ({ ...prev, date: '' }));
+                }}
+                minDate={new Date()}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Select a date"
+                isClearable
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select"
+                className="datepicker-input"
+                wrapperClassName="datepicker-wrapper"
               />
               {meetingErrors.date && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.date}</p>}
             </div>
@@ -801,31 +1215,383 @@ const EDCSChatbot = () => {
     }
 
     // default: chat view
-    return (
-      <div
-        style={{
+    if (queueState) {
+      return (
+        <div style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: '16px',
-          backgroundColor: '#f8fafc',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px',
-        }}
-      >
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            style={{
-              display: 'flex',
-              gap: '8px',
-              alignItems: 'flex-end',
-              justifyContent:
-                message.type === 'user' ? 'flex-end' : 'flex-start',
-              animation: 'fadeIn 0.3s ease',
-            }}
-          >
-            {message.type === 'bot' && (
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#f8fafc',
+          padding: '24px',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '16px' }}>⏳</div>
+          <p style={{ color: '#1e3a5f', fontWeight: '600', fontSize: '16px', marginBottom: '8px' }}>
+            Our system is currently busy.
+          </p>
+          <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '8px' }}>
+            You are at position <strong>{queueState.position}</strong> in the queue.
+          </p>
+          <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>
+            Please wait, you will be connected automatically.
+          </p>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: '10px', height: '10px',
+                backgroundColor: '#ef5b6c',
+                borderRadius: '50%',
+                animation: 'bounce 1.4s infinite ease-in-out both',
+                animationDelay: `${-0.32 + i * 0.16}s`
+              }} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      !userInfo ? (
+        /* USER INFO FORM */
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          padding: '24px 20px',
+          backgroundColor: '#f8fafc'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '28px 24px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            border: '1px solid #e2e8f0'
+          }}>
+            <div style={{
+              textAlign: 'center',
+              marginBottom: '24px'
+            }}>
+              <div style={{
+                width: '56px',
+                height: '56px',
+                backgroundColor: '#1e3a5f',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+                fontSize: '24px'
+              }}>
+                
+              </div>
+              <h3 style={{
+                margin: '0 0 4px',
+                color: '#1e3a5f',
+                fontSize: '16px',
+                fontWeight: '700'
+              }}>
+                Welcome to EDCS Support
+              </h3>
+              <p style={{
+                margin: 0,
+                color: '#64748b',
+                fontSize: '13px'
+              }}>
+                Please enter your details to start chatting
+              </p>
+            </div>
+
+            {/* Name field */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '6px'
+              }}>
+                Full Name *
+              </label>
+              <input
+                type="text"
+                placeholder="Enter your name"
+                value={userForm.name}
+                onChange={e => setUserForm(p => ({
+                  ...p, name: e.target.value
+                }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: userFormErrors.name
+                    ? '2px solid #ef4444'
+                    : '2px solid #e2e8f0',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  fontFamily: 'inherit'
+                }}
+              />
+              {userFormErrors.name && (
+                <p style={{
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  margin: '4px 0 0'
+                }}>
+                  {userFormErrors.name}
+                </p>
+              )}
+            </div>
+
+            {/* Email field */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '6px'
+              }}>
+                Email Address *
+              </label>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={userForm.email}
+                onChange={e => setUserForm(p => ({
+                  ...p, email: e.target.value
+                }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: userFormErrors.email
+                    ? '2px solid #ef4444'
+                    : '2px solid #e2e8f0',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  fontFamily: 'inherit'
+                }}
+              />
+              {userFormErrors.email && (
+                <p style={{
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  margin: '4px 0 0'
+                }}>
+                  {userFormErrors.email}
+                </p>
+              )}
+            </div>
+
+            {/* Phone field */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '6px'
+              }}>
+                Phone Number *
+              </label>
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center'
+              }}>
+                <div style={{
+                  padding: '10px 12px',
+                  backgroundColor: '#f1f5f9',
+                  borderRadius: '8px',
+                  border: '2px solid #e2e8f0',
+                  fontSize: '14px',
+                  color: '#374151',
+                  whiteSpace: 'nowrap'
+                }}>
+                   +91
+                </div>
+                <input
+                  type="tel"
+                  placeholder="Enter phone number"
+                  value={userForm.phone}
+                  onChange={e => setUserForm(p => ({
+                    ...p, phone: e.target.value
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: userFormErrors.phone
+                      ? '2px solid #ef4444'
+                      : '2px solid #e2e8f0',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    fontFamily: 'inherit'
+                  }}
+                />
+              </div>
+              {userFormErrors.phone && (
+                <p style={{
+                  color: '#ef4444',
+                  fontSize: '12px',
+                  margin: '4px 0 0'
+                }}>
+                  {userFormErrors.phone}
+                </p>
+              )}
+            </div>
+
+            {/* Start Chat Button */}
+            <button
+              onClick={() => {
+                const errors = {};
+                if (!userForm.name.trim()) {
+                  errors.name = 'Name is required';
+                }
+                if (!userForm.email.trim()) {
+                  errors.email = 'Email is required';
+                } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                  userForm.email
+                )) {
+                  errors.email = 'Enter a valid email address';
+                }
+                if (!userForm.phone.trim()) {
+                  errors.phone = 'Phone number is required';
+                } else if (!/^\d{10}$/.test(
+                  userForm.phone.replace(/\s/g, '')
+                )) {
+                  errors.phone = 'Enter a valid 10-digit phone number';
+                }
+                if (Object.keys(errors).length > 0) {
+                  setUserFormErrors(errors);
+                  return;
+                }
+                setUserFormErrors({});
+                setUserInfo({
+                  name: userForm.name.trim(),
+                  email: userForm.email.trim(),
+                  phone: userForm.phone.trim()
+                });
+              }}
+              style={{
+                width: '100%',
+                padding: '13px',
+                backgroundColor: '#1e3a5f',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '15px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              ➤ Start Chat
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* EXISTING CHAT CONTENT GOES HERE */
+        /* wrap all the existing chat messages and options JSX 
+           inside this else block */
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '16px',
+            backgroundColor: '#f8fafc',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}
+        >
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'flex-end',
+                justifyContent:
+                  message.type === 'user' ? 'flex-end' : 'flex-start',
+                animation: 'fadeIn 0.3s ease',
+              }}
+            >
+              {message.type === 'bot' && (
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ef5b6c',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Bot size={18} />
+                </div>
+              )}
+              <div
+                style={{
+                  maxWidth: '70%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  whiteSpace: 'pre-line',
+                  fontSize: '14px',
+                  lineHeight: '1.5',
+                  ...(message.type === 'user'
+                    ? {
+                      background:
+                        'linear-gradient(135deg, #ef5b6c 0%, #d94456 100%)',
+                      color: 'white',
+                      borderBottomRightRadius: '4px',
+                      fontWeight: '500',
+                    }
+                    : {
+                      backgroundColor: 'white',
+                      color: '#1f2937',
+                      boxShadow: '0 2px 4px rgba(30, 58, 95, 0.1)',
+                      borderBottomLeftRadius: '4px',
+                      border: '1px solid #e2e8f0',
+                    }),
+                }}
+              >
+                {message.text}
+              </div>
+              {message.type === 'user' && (
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: '#1e3a5f',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <User size={18} />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isTyping && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
               <div
                 style={{
                   width: '32px',
@@ -836,85 +1602,35 @@ const EDCSChatbot = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0,
                 }}
               >
                 <Bot size={18} />
               </div>
-            )}
+              <TypingIndicator />
+            </div>
+          )}
+
+          {messages.length > 0 &&
+            messages[messages.length - 1].type === 'bot' &&
+            renderOptions()}
+
+          {sessionTerminated && (
             <div
               style={{
-                maxWidth: '70%',
-                padding: '12px',
-                borderRadius: '12px',
-                whiteSpace: 'pre-line',
-                fontSize: '14px',
-                lineHeight: '1.5',
-                ...(message.type === 'user'
-                  ? {
-                    background:
-                      'linear-gradient(135deg, #ef5b6c 0%, #d94456 100%)',
-                    color: 'white',
-                    borderBottomRightRadius: '4px',
-                    fontWeight: '500',
-                  }
-                  : {
-                    backgroundColor: 'white',
-                    color: '#1f2937',
-                    boxShadow: '0 2px 4px rgba(30, 58, 95, 0.1)',
-                    borderBottomLeftRadius: '4px',
-                    border: '1px solid #e2e8f0',
-                  }),
+                marginTop: '12px',
+                textAlign: 'center',
+                color: '#dc2626',
+                fontSize: '13px',
+                fontWeight: '500',
               }}
             >
-              {message.text}
+              Session ended. Please close and reopen the chat.
             </div>
-            {message.type === 'user' && (
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: '#1e3a5f',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <User size={18} />
-              </div>
-            )}
-          </div>
-        ))}
+          )}
 
-        {isTyping && (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                backgroundColor: '#ef5b6c',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Bot size={18} />
-            </div>
-            <TypingIndicator />
-          </div>
-        )}
-
-        {messages.length > 0 &&
-          messages[messages.length - 1].type === 'bot' &&
-          renderOptions()}
-
-        <div ref={messagesEndRef} />
-      </div>
+          <div ref={messagesEndRef} />
+        </div>
+      )
     );
   };
 
@@ -973,6 +1689,24 @@ const EDCSChatbot = () => {
   return (
     <>
       <style>{`
+        .datepicker-wrapper {
+          width: 100%;
+        }
+        .datepicker-input {
+          width: 100%;
+          padding: 10px;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+          font-size: 14px;
+          box-sizing: border-box;
+          font-family: inherit;
+          background: white;
+          cursor: pointer;
+        }
+        .datepicker-input:focus {
+          outline: none;
+          border-color: #1e3a5f;
+        }
         @keyframes slideUp {
           from { transform: translateY(20px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
@@ -1019,9 +1753,9 @@ const EDCSChatbot = () => {
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>EVA</h3>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>{(chatbotContent && chatbotContent.botName) ? chatbotContent.botName : 'EVA'}</h3>
             <p style={{ margin: 0, fontSize: '12px', opacity: 0.95 }}>
-              EDCS Assistant
+              {(chatbotContent && chatbotContent.companyName) ? chatbotContent.companyName : 'EDCS Assistant'}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -1080,7 +1814,7 @@ const EDCSChatbot = () => {
               fontWeight: '500',
             }}
           >
-            Powered by EDCS | {currentView === 'chat' ? 'Select options above' : 'Privacy Protected'}
+            {currentView === 'chat' ? ((chatbotContent && chatbotContent.footerText) ? chatbotContent.footerText : 'Powered by EDCS | Select options above') : 'Powered by EDCS | Privacy Protected'}
           </p>
         </div>
       </div>

@@ -1,3 +1,4 @@
+// chatbotData.js
 export const chatbotData = {
   main: {
     message: "👋 Hello! Welcome to our company. We specialize in SAP Consulting, Oracle Services, and IT Staffing Solutions. Select an option to learn more.",
