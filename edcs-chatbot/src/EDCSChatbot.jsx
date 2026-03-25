@@ -2,8 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Home, Minus, Bot, User, Calendar, Ticket } from 'lucide-react';
 import { chatbotData, answers } from './chatbotData';
+import { curateMenus, curatedCareersAnswers } from './curatedChatbotConfig';
 import { validateTicket, validateMeeting, validateTicketId } from './validation';
 import { apiUrl } from './apiBase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -27,8 +30,14 @@ const EDCSChatbot = () => {
     email: userInfo?.email || '',
     phone: userInfo?.phone || '',
     category: '',
+    department: '',
     priority: 'Normal',
-    description: ''
+    description: '',
+    preferred_date: '',
+    preferred_time: '',
+    notes: '',
+    context: {},
+    session_id: ''
   });
   const [meetingData, setMeetingData] = useState({
     name: userInfo?.name || '',
@@ -38,7 +47,9 @@ const EDCSChatbot = () => {
     purpose: '',
     date: '',
     time: '',
-    notes: ''
+    notes: '',
+    context: {},
+    session_id: ''
   });
   const [checkTicketId, setCheckTicketId] = useState('');
 
@@ -49,6 +60,7 @@ const EDCSChatbot = () => {
 
   // track which submenu options were already answered
   const [answeredOptions, setAnsweredOptions] = useState([]);
+  const [followUpContext, setFollowUpContext] = useState(null);
 
   const messagesEndRef = useRef(null);
   const sessionIdRef = useRef(null);
@@ -99,15 +111,39 @@ const EDCSChatbot = () => {
   }, [messages]);
 
   useEffect(() => {
+    let unsub = null;
+    try {
+      unsub = onSnapshot(doc(db, 'chatbot_content', 'main'), (snap) => {
+        if (snap.exists()) setChatbotContent(snap.data());
+      });
+    } catch (err) {
+      // ignore and fallback to API below
+    }
+
     fetch(apiUrl('/api/chatbot-content'))
       .then(res => res.json())
       .then(data => {
-        if (data.success && data.content) {
-          setChatbotContent(data.content);
-        }
+        if (data.success && data.content) setChatbotContent(data.content);
       })
       .catch(err => console.error('Failed to load chatbot content:', err));
+
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      fetch(apiUrl('/api/chatbot-content'))
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.content) setChatbotContent(data.content);
+        })
+        .catch(() => { });
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -178,13 +214,15 @@ const EDCSChatbot = () => {
     };
   }, []);
 
-  const activeChatbotData = (chatbotContent && chatbotContent.menus)
+  const rawMenus = (chatbotContent && chatbotContent.menus)
     ? chatbotContent.menus
     : chatbotData;
+  const activeChatbotData = curateMenus(rawMenus);
 
-  const activeAnswers = (chatbotContent && chatbotContent.answers)
+  const rawAnswers = (chatbotContent && chatbotContent.answers)
     ? chatbotContent.answers
     : answers;
+  const activeAnswers = { ...rawAnswers, ...curatedCareersAnswers };
 
   const welcomeMessages = (chatbotContent && chatbotContent.welcomeMessages)
     ? chatbotContent.welcomeMessages
@@ -242,7 +280,11 @@ const EDCSChatbot = () => {
 
                   const sessionRes = await fetch(
                     apiUrl('/api/session/start'),
-                    { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ user: userInfo }),
+                    }
                   );
                   const sessionData = await sessionRes.json();
                   if (sessionData.success) {
@@ -295,6 +337,7 @@ const EDCSChatbot = () => {
           const res = await fetch(apiUrl('/api/session/start'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: userInfo }),
           });
           const data = await res.json();
           if (!data.success || !data.session_id) {
@@ -403,6 +446,7 @@ const EDCSChatbot = () => {
       setMeetingErrors({});
       setFormError('');
       setAnsweredOptions([]);
+      setFollowUpContext(null);
     }, 300);
   };
 
@@ -421,6 +465,32 @@ const EDCSChatbot = () => {
     setMessages(prev => [...prev, { type: 'user', text, timestamp: new Date() }]);
   };
 
+  const formatLocalDateYYYYMMDD = (date) => {
+    if (!date) return '';
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const trackTabClick = async (option, menuId) => {
+    if (!sessionIdRef.current) return;
+    try {
+      await fetch(apiUrl('/api/session/event'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionIdRef.current,
+          menu_id: menuId,
+          option_text: option?.text,
+          action: option?.action,
+        }),
+      });
+    } catch (err) {
+      // best-effort tracking
+    }
+  };
+
   const handleBackToMain = () => {
     addUserMessage("🏠 Back to Main Menu");
     setTimeout(() => {
@@ -434,8 +504,78 @@ const EDCSChatbot = () => {
     }, 300);
   };
 
+  const getDepartmentForMenu = (menuId) => {
+    if (menuId === 'sap') return 'SAP';
+    if (menuId === 'oracle') return 'Oracle DBA';
+    // staffing (Managed IT) + careers route to HR by default
+    return 'HR Department';
+  };
+
+  const getTicketCategoryForMenu = (menuId) => {
+    if (menuId === 'main') return 'General';
+    if (menuId === 'careers') return 'Recruitment';
+    return 'Technical';
+  };
+
+  const getMeetingPurposeForMenu = (menuId) => {
+    if (menuId === 'careers') return 'Career';
+    return 'Consultation';
+  };
+
+  const openPrefilledTicket = (ctx) => {
+    const menuId = ctx?.menu_id || currentMenu;
+    const topicText = ctx?.option_text || '';
+    const department = getDepartmentForMenu(menuId);
+    const category = getTicketCategoryForMenu(menuId);
+    const description = `User is interested in: ${topicText || menuId}. Preferred date/time provided.`;
+
+    setTicketData(prev => ({
+      ...prev,
+      session_id: sessionIdRef.current || '',
+      context: ctx || {},
+      name: userInfo?.name || prev.name,
+      email: userInfo?.email || prev.email,
+      phone: userInfo?.phone || prev.phone,
+      department,
+      category,
+      priority: 'Normal',
+      description,
+      preferred_date: '',
+      preferred_time: '',
+      notes: '',
+    }));
+    setTicketErrors({});
+    setFormError('');
+    setCurrentView('ticket');
+  };
+
+  const openPrefilledMeeting = (ctx) => {
+    const menuId = ctx?.menu_id || currentMenu;
+    const topicText = ctx?.option_text || '';
+    const department = getDepartmentForMenu(menuId);
+    const purpose = getMeetingPurposeForMenu(menuId);
+
+    setMeetingData(prev => ({
+      ...prev,
+      session_id: sessionIdRef.current || '',
+      context: ctx || {},
+      name: userInfo?.name || prev.name,
+      email: userInfo?.email || prev.email,
+      phone: userInfo?.phone || prev.phone,
+      department,
+      purpose,
+      notes: topicText ? `Topic: ${topicText}` : prev.notes,
+      date: '',
+      time: '',
+    }));
+    setMeetingErrors({});
+    setFormError('');
+    setCurrentView('meeting');
+  };
+
   // ---------- OPTION CLICK ----------
   const handleOptionClick = async (option) => {
+    setFollowUpContext(null);
     if (sessionIdRef.current) {
       try {
         console.log('handleOptionClick called, sessionId:', sessionIdRef.current, 'query:', option.text);
@@ -458,11 +598,20 @@ const EDCSChatbot = () => {
     }
 
     addUserMessage(option.text);
+    trackTabClick(option, currentMenu);
 
     if (option.action === 'ticket') {
-      setTimeout(() => setCurrentView('ticket'), 300);
+      setTimeout(() => openPrefilledTicket({
+        menu_id: currentMenu,
+        option_id: option.id,
+        option_text: option.text,
+      }), 300);
     } else if (option.action === 'meeting') {
-      setTimeout(() => setCurrentView('meeting'), 300);
+      setTimeout(() => openPrefilledMeeting({
+        menu_id: currentMenu,
+        option_id: option.id,
+        option_text: option.text,
+      }), 300);
     } else if (option.action === 'checkStatus') {
       setTimeout(() => setCurrentView('checkStatus'), 300);
     } else if (option.action === 'menu') {
@@ -475,6 +624,13 @@ const EDCSChatbot = () => {
       setAnsweredOptions(prev =>
         prev.includes(option.id) ? prev : [...prev, option.id]
       );
+      if (!isMainMenuAnswer) {
+        setFollowUpContext({
+          menu_id: currentMenu,
+          option_id: option.id,
+          option_text: option.text,
+        });
+      }
       setTimeout(() => {
         addBotMessage(activeAnswers[option.id], isMainMenuAnswer ? 'answered' : currentMenu);
       }, 300);
@@ -491,10 +647,17 @@ const EDCSChatbot = () => {
 
     setIsSubmitting(true);
     try {
+      const payload = {
+        ...ticketData,
+        session_id: sessionIdRef.current || ticketData.session_id || '',
+        description: ticketData.notes
+          ? `${ticketData.description}\n\nNotes: ${ticketData.notes}`
+          : ticketData.description,
+      };
       const response = await fetch(apiUrl('/api/ticket'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ticketData),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error('Network error');
       const result = await response.json();
@@ -539,10 +702,14 @@ const EDCSChatbot = () => {
 
     setIsSubmitting(true);
     try {
+      const payload = {
+        ...meetingData,
+        session_id: sessionIdRef.current || meetingData.session_id || '',
+      };
       const response = await fetch(apiUrl('/api/meeting'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(meetingData),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error('Network error');
       const result = await response.json();
@@ -687,7 +854,7 @@ const EDCSChatbot = () => {
       );
     }
 
-    // show only unanswered submenu options (but keep main menu intact if you want)
+    // hide options already answered (keep main menu fully visible)
     const visibleOptions =
       currentMenu === 'main'
         ? currentData.options
@@ -695,6 +862,70 @@ const EDCSChatbot = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+        {followUpContext && (
+          <div style={{
+            backgroundColor: '#fff7ed',
+            border: '1px solid #fed7aa',
+            borderRadius: '10px',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}>
+            <div style={{ fontSize: '13px', color: '#7c2d12', fontWeight: '600' }}>
+              Actions for: {followUpContext.option_text}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => openPrefilledMeeting(followUpContext)}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#ef5b6c',
+                  color: 'white',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                }}
+              >
+                Request meeting
+              </button>
+              <button
+                onClick={() => openPrefilledTicket(followUpContext)}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#1e3a5f',
+                  color: 'white',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                }}
+              >
+                Submit query
+              </button>
+            </div>
+            <button
+              onClick={() => setFollowUpContext(null)}
+              style={{
+                backgroundColor: '#6b7280',
+                color: 'white',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '600',
+              }}
+            >
+              Clear actions
+            </button>
+          </div>
+        )}
         {visibleOptions.map((option, index) => (
           <button
             key={option.id}
@@ -753,122 +984,84 @@ const EDCSChatbot = () => {
           </h3>
           {formError && <p style={{ color: 'red', fontSize: 14 }}>{formError}</p>}
           <form onSubmit={handleTicketSubmit} noValidate>
-            {/* name */}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '12px',
+              marginBottom: '12px',
+              fontSize: '13px',
+              color: '#334155',
+              lineHeight: '1.4'
+            }}>
+              <div><strong>Topic:</strong> {ticketData.context?.option_text || 'General query'}</div>
+              <div><strong>Department:</strong> {ticketData.department || 'HR Department'}</div>
+              <div><strong>Email:</strong> {ticketData.email}</div>
+            </div>
+
             <div style={{ marginBottom: '12px' }}>
               <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Your Name *
+                Preferred Date *
               </label>
-              <input
-                type="text"
-                style={inputStyle}
-                value={ticketData.name || ''}
-                onChange={(e) => setTicketData(prev => ({ ...prev, name: e.target.value }))}
+              <DatePicker
+                selected={ticketData.preferred_date ? new Date(ticketData.preferred_date) : null}
+                onChange={(date) => {
+                  const formatted = formatLocalDateYYYYMMDD(date);
+                  setTicketData(prev => ({ ...prev, preferred_date: formatted }));
+                  if (ticketErrors.preferred_date) setTicketErrors(prev => ({ ...prev, preferred_date: '' }));
+                }}
+                minDate={new Date()}
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Select a date"
+                isClearable
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select"
+                className="datepicker-input"
+                wrapperClassName="datepicker-wrapper"
               />
-              {ticketErrors.name && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.name}</p>}
+              {ticketErrors.preferred_date && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.preferred_date}</p>}
             </div>
-            {/* email */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Your Email *
-              </label>
-              <input
-                type="email"
-                style={inputStyle}
-                value={ticketData.email || ''}
-                onChange={(e) => setTicketData(prev => ({ ...prev, email: e.target.value }))}
-              />
-              {ticketErrors.email && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.email}</p>}
-            </div>
-            {/* phone */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Phone (Optional)
-              </label>
-              <input
-                type="tel"
-                style={inputStyle}
-                value={ticketData.phone || ''}
-                onChange={(e) => setTicketData(prev => ({ ...prev, phone: e.target.value }))}
-              />
-              {ticketErrors.phone && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.phone}</p>}
-            </div>
-            {/* category */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Category *
-              </label>
-              <select
-                style={inputStyle}
-                value={ticketData.category || ''}
-                onChange={(e) => setTicketData(prev => ({ ...prev, category: e.target.value }))}
-              >
-                <option value="">Select</option>
-                <option value="General">General</option>
-                <option value="Company">Company</option>
-                <option value="Recruitment">Recruitment</option>
-                <option value="Technical">Technical</option>
-                <option value="Other">Other</option>
-              </select>
-              {ticketErrors.category && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.category}</p>}
-            </div>
-            {/* department */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Department *
-              </label>
-              <select
-                style={inputStyle}
-                value={ticketData.department || ''}
-                onChange={(e) => setTicketData(prev => ({ ...prev, department: e.target.value }))}
-              >
-                <option value="">Select</option>
-                <option value="HR Department">HR Department</option>
-                <option value="Accounts">Accounts</option>
-                <option value="Oracle DBA">Oracle DBA</option>
-                <option value="SAP">SAP</option>
-              </select>
-              {ticketErrors.department && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.department}</p>}
-            </div>
-            {/* priority */}
+
             <div style={{ marginBottom: '12px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
-                Priority *
+                Preferred Time *
               </label>
-              <div style={{ display: 'flex', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <input
                     type="radio"
-                    name="priority"
-                    value="Normal"
-                    checked={ticketData.priority === 'Normal'}
-                    onChange={(e) => setTicketData(prev => ({ ...prev, priority: e.target.value }))}
+                    name="ticketTime"
+                    value="Morning"
+                    checked={ticketData.preferred_time === 'Morning'}
+                    onChange={(e) => setTicketData(prev => ({ ...prev, preferred_time: e.target.value }))}
                   />
-                  Normal
+                  Morning (9 AM - 12 PM)
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <input
                     type="radio"
-                    name="priority"
-                    value="Urgent"
-                    checked={ticketData.priority === 'Urgent'}
-                    onChange={(e) => setTicketData(prev => ({ ...prev, priority: e.target.value }))}
+                    name="ticketTime"
+                    value="Afternoon"
+                    checked={ticketData.preferred_time === 'Afternoon'}
+                    onChange={(e) => setTicketData(prev => ({ ...prev, preferred_time: e.target.value }))}
                   />
-                  Urgent
+                  Afternoon (2 PM - 5 PM)
                 </label>
               </div>
+              {ticketErrors.preferred_time && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.preferred_time}</p>}
             </div>
-            {/* description */}
+
             <div style={{ marginBottom: '12px' }}>
               <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Your Question *
+                Additional Notes (Optional)
               </label>
               <textarea
-                rows="4"
+                rows="3"
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
-                value={ticketData.description || ''}
-                onChange={(e) => setTicketData(prev => ({ ...prev, description: e.target.value }))}
+                value={ticketData.notes || ''}
+                onChange={(e) => setTicketData(prev => ({ ...prev, notes: e.target.value }))}
               />
-              {ticketErrors.description && <p style={{ color: 'red', fontSize: 12 }}>{ticketErrors.description}</p>}
             </div>
 
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -951,80 +1144,19 @@ const EDCSChatbot = () => {
           </h3>
           {formError && <p style={{ color: 'red', fontSize: 14 }}>{formError}</p>}
           <form onSubmit={handleMeetingSubmit} noValidate>
-            {/* name */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Your Name *
-              </label>
-              <input
-                type="text"
-                style={inputStyle}
-                value={meetingData.name || ''}
-                onChange={(e) => setMeetingData(prev => ({ ...prev, name: e.target.value }))}
-              />
-              {meetingErrors.name && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.name}</p>}
-            </div>
-            {/* email */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Your Email *
-              </label>
-              <input
-                type="email"
-                style={inputStyle}
-                value={meetingData.email || ''}
-                onChange={(e) => setMeetingData(prev => ({ ...prev, email: e.target.value }))}
-              />
-              {meetingErrors.email && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.email}</p>}
-            </div>
-            {/* phone */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Phone *
-              </label>
-              <input
-                type="tel"
-                style={inputStyle}
-                value={meetingData.phone || ''}
-                onChange={(e) => setMeetingData(prev => ({ ...prev, phone: e.target.value }))}
-              />
-              {meetingErrors.phone && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.phone}</p>}
-            </div>
-            {/* purpose */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Meeting Purpose *
-              </label>
-              <select
-                style={inputStyle}
-                value={meetingData.purpose || ''}
-                onChange={(e) => setMeetingData(prev => ({ ...prev, purpose: e.target.value }))}
-              >
-                <option value="">Select</option>
-                <option value="Career">Career Discussion</option>
-                <option value="Project">Project Inquiry</option>
-                <option value="Consultation">Technical Consultation</option>
-                <option value="General">General Meeting</option>
-              </select>
-              {meetingErrors.purpose && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.purpose}</p>}
-            </div>
-            {/* department */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
-                Department *
-              </label>
-              <select
-                style={inputStyle}
-                value={meetingData.department || ''}
-                onChange={(e) => setMeetingData(prev => ({ ...prev, department: e.target.value }))}
-              >
-                <option value="">Select</option>
-                <option value="HR Department">HR Department</option>
-                <option value="Accounts">Accounts</option>
-                <option value="Oracle DBA">Oracle DBA</option>
-                <option value="SAP">SAP</option>
-              </select>
-              {meetingErrors.department && <p style={{ color: 'red', fontSize: 12 }}>{meetingErrors.department}</p>}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '12px',
+              marginBottom: '12px',
+              fontSize: '13px',
+              color: '#334155',
+              lineHeight: '1.4'
+            }}>
+              <div><strong>Topic:</strong> {meetingData.context?.option_text || 'General meeting'}</div>
+              <div><strong>Department:</strong> {meetingData.department || 'HR Department'}</div>
+              <div><strong>Email:</strong> {meetingData.email}</div>
             </div>
             {/* date */}
             <div style={{ marginBottom: '12px' }}>
@@ -1034,7 +1166,7 @@ const EDCSChatbot = () => {
               <DatePicker
                 selected={meetingData.date ? new Date(meetingData.date) : null}
                 onChange={(date) => {
-                  const formatted = date ? date.toISOString().split('T')[0] : '';
+                  const formatted = formatLocalDateYYYYMMDD(date);
                   setMeetingData(prev => ({ ...prev, date: formatted }));
                   if (meetingErrors.date) setMeetingErrors(prev => ({ ...prev, date: '' }));
                 }}

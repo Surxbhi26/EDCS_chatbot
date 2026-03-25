@@ -27,6 +27,25 @@ export function validateTicket(data = {}) {
     errors.description = 'Description must be at least 10 characters.';
   }
 
+  if (!data.preferred_date || typeof data.preferred_date !== 'string' || data.preferred_date.trim() === '') {
+    errors.preferred_date = 'Preferred date is required.';
+  } else {
+    const inputDate = new Date(data.preferred_date);
+    const today = new Date();
+    const inputOnly = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (!(inputDate instanceof Date) || isNaN(inputDate.getTime())) {
+      errors.preferred_date = 'Please enter a valid date.';
+    } else if (inputOnly < todayOnly) {
+      errors.preferred_date = 'Date must be today or later.';
+    }
+  }
+
+  if (!data.preferred_time || typeof data.preferred_time !== 'string' || data.preferred_time.trim() === '') {
+    errors.preferred_time = 'Preferred time is required.';
+  }
+
   if (data.phone && String(data.phone).trim() !== '') {
     const phoneStr = String(data.phone).trim();
     if (!phoneRegex.test(phoneStr)) {
@@ -78,8 +97,8 @@ export function validateMeeting(data = {}) {
 
     if (!(inputDate instanceof Date) || isNaN(inputDate.getTime())) {
       errors.date = 'Please enter a valid date.';
-    } else if (inputOnly <= todayOnly) {
-      errors.date = 'Date must be in the future.';
+    } else if (inputOnly < todayOnly) {
+      errors.date = 'Date must be today or later.';
     }
   }
 

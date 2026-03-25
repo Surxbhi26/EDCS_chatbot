@@ -11,7 +11,10 @@ from zoneinfo import ZoneInfo
 from google.cloud import firestore
 
 # Timezone for India Standard Time
-IST = ZoneInfo('Asia/Kolkata')
+try:
+    IST = ZoneInfo('Asia/Kolkata')
+except Exception:
+    IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 
 def get_ist_now():
     """Get current time in IST as ISO format string"""
@@ -36,6 +39,8 @@ from database import (
     cleanup_stale_sessions,
     log_event,
     check_and_record_query,
+    record_tab_click,
+    increment_session_action,
     get_active_session_count,
     get_max_sessions,
     add_to_queue,
@@ -77,12 +82,16 @@ def create_ticket():
 
         ticket_data = {
             "ticket_id": ticket_id,
+            "session_id": data.get("session_id"),
             "name": data.get("name"),
             "email": data.get("email"),
             "phone": data.get("phone", ""),
             "category": data.get("category"),
             "priority": data.get("priority", "Normal"),
             "description": data.get("description"),
+            "preferred_date": data.get("preferred_date"),
+            "preferred_time": data.get("preferred_time"),
+            "context": data.get("context", {}),
             "status": "Pending",
             "created_at": get_ist_now(),
             "response": None,
@@ -92,7 +101,18 @@ def create_ticket():
         db_id = save_ticket(ticket_data)
 
         if db_id:
+            if ticket_data.get("session_id"):
+                try:
+                    increment_session_action(ticket_data["session_id"], "query")
+                except Exception as e:
+                    print(f"Error incrementing session query count: {e}")
             send_ticket_notification(ticket_data)
+            if ticket_data.get("session_id"):
+                log_event("query_submitted", ticket_data["session_id"], {
+                    "ticket_id": ticket_id,
+                    "category": ticket_data.get("category"),
+                    "department": ticket_data.get("department"),
+                })
 
             print("\n" + "=" * 50)
             print("🎫 NEW TICKET CREATED")
@@ -132,6 +152,7 @@ def create_meeting():
 
         meeting_data = {
             "meeting_id": meeting_id,
+            "session_id": data.get("session_id"),
             "name": data.get("name"),
             "email": data.get("email"),
             "phone": data.get("phone"),
@@ -139,6 +160,7 @@ def create_meeting():
             "date": data.get("date"),
             "time": data.get("time"),
             "notes": data.get("notes", ""),
+            "context": data.get("context", {}),
             "status": "Pending",
             "created_at": get_ist_now(),
             "department": data.get("department", ""),
@@ -147,7 +169,18 @@ def create_meeting():
         db_id = save_meeting(meeting_data)
 
         if db_id:
+            if meeting_data.get("session_id"):
+                try:
+                    increment_session_action(meeting_data["session_id"], "meeting")
+                except Exception as e:
+                    print(f"Error incrementing session meeting count: {e}")
             send_meeting_notification(meeting_data)
+            if meeting_data.get("session_id"):
+                log_event("meeting_requested", meeting_data["session_id"], {
+                    "meeting_id": meeting_id,
+                    "purpose": meeting_data.get("purpose"),
+                    "department": meeting_data.get("department"),
+                })
 
             print("\n" + "=" * 50)
             print("📅 NEW MEETING REQUESTED")
@@ -591,8 +624,10 @@ def send_department_email():
 @app.route("/api/session/start", methods=["POST"])
 def session_start():
     """Start a new chatbot session."""
+    data = request.json or {}
     session_id = str(uuid.uuid4())
-    create_session(session_id)
+    user = data.get("user") if isinstance(data.get("user"), dict) else {}
+    create_session(session_id, user=user)
     log_event("session_started", session_id, {})
     return jsonify({"success": True, "session_id": session_id})
 
@@ -668,6 +703,31 @@ def check_repeat():
     except Exception as e:
         print(f"Error checking repeat: {e}")
         return jsonify({"terminated": False})
+
+
+@app.route("/api/session/event", methods=["POST"])
+def session_event():
+    try:
+        data = request.json or {}
+        session_id = data.get("session_id")
+        if not session_id:
+            return jsonify({"success": False, "message": "session_id required"}), 400
+
+        menu_id = data.get("menu_id")
+        option_text = data.get("option_text")
+        action = data.get("action")
+
+        record_tab_click(session_id, menu_id=menu_id, option_id=None, option_text=option_text, action=action)
+        log_event("tab_clicked", session_id, {
+            "menu_id": menu_id,
+            "option_text": option_text,
+            "action": action,
+        })
+
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"Error in session_event: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 @app.route("/api/queue/check", methods=["POST"])

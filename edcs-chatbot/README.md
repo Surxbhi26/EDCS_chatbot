@@ -2,6 +2,14 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Firebase Setup (Required)
+
+This app uses Firebase Auth + Firestore for the admin panel.
+
+1. Create `edcs-chatbot/.env` (see `edcs-chatbot/.env.example`)
+2. Add your Firebase **Web App** config values (Firebase Console → Project settings → Your apps → Web app)
+3. Restart the dev server after changing `.env` (CRA only reads env on startup)
+
 ## Available Scripts
 
 In the project directory, you can run:

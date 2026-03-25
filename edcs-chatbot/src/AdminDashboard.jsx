@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { apiUrl } from './apiBase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, orderBy, limit, where } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { curateMenus } from './curatedChatbotConfig';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('email');
@@ -13,6 +14,10 @@ const AdminDashboard = () => {
   const [saveStatus, setSaveStatus] = useState({});
   const [sessions, setSessions] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [showUsageCharts, setShowUsageCharts] = useState(true);
+  const [usageRange, setUsageRange] = useState('7d'); // 7d | 15d | month | all
   const [cleanupStatus, setCleanupStatus] = useState('');
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [chatbotContent, setChatbotContent] = useState(null);
@@ -51,6 +56,44 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
+    const now = new Date();
+    let start = null;
+    if (usageRange === '7d') start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    if (usageRange === '15d') start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14);
+    if (usageRange === 'month') start = new Date(now.getFullYear(), now.getMonth(), 1);
+    // For "overall", use a month-wise view for the last 12 months (keeps charts fast + readable)
+    if (usageRange === 'all') start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    const ticketsBase = [collection(db, 'tickets'), orderBy('created_at', 'desc')];
+    const meetingsBase = [collection(db, 'meetings'), orderBy('created_at', 'desc')];
+
+    const unsubTickets = onSnapshot(
+      start
+        ? query(...ticketsBase, where('created_at', '>=', start.toISOString()), limit(5000))
+        : query(...ticketsBase, limit(5000)),
+      (snap) => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setTickets(data);
+      }
+    );
+
+    const unsubMeetings = onSnapshot(
+      start
+        ? query(...meetingsBase, where('created_at', '>=', start.toISOString()), limit(5000))
+        : query(...meetingsBase, limit(5000)),
+      (snap) => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMeetings(data);
+      }
+    );
+
+    return () => {
+      unsubTickets();
+      unsubMeetings();
+    };
+  }, [usageRange]);
+
+  useEffect(() => {
     const unsub = onSnapshot(
       query(collection(db, 'queue'), orderBy('joined_at', 'asc')),
       (snap) => {
@@ -62,11 +105,13 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
-    fetch(apiUrl('/api/chatbot-content'))
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setChatbotContent(data.content);
-      });
+    const unsub = onSnapshot(
+      doc(db, 'chatbot_content', 'main'),
+      (snap) => {
+        if (snap.exists()) setChatbotContent(snap.data());
+      }
+    );
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -98,8 +143,12 @@ const AdminDashboard = () => {
       .map(([day, count]) => ({ day, sessions: count }))
       .slice(-14);
 
-    // Event counts (logs removed)
-    const eventCounts = {};
+    // Event counts (derived from session docs)
+    const eventCounts = {
+      tabClicks: sessions.reduce((sum, s) => sum + (s.tab_clicks_total || 0), 0),
+      queries: sessions.reduce((sum, s) => sum + (s.requested_query_count || 0), 0),
+      meetings: sessions.reduce((sum, s) => sum + (s.requested_meeting_count || 0), 0),
+    };
 
     // Peak hours
     const hourMap = {};
@@ -142,16 +191,18 @@ const AdminDashboard = () => {
   const handleSaveChatbotContent = async () => {
     setContentSaving(true);
     try {
-      const res = await fetch(apiUrl('/api/chatbot-content'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(chatbotContent)
-      });
-      const data = await res.json();
-      if (data.success) {
+      try {
+        await setDoc(doc(db, 'chatbot_content', 'main'), chatbotContent || {});
         setContentSaveMsg('Saved successfully!');
-      } else {
-        setContentSaveMsg('Error saving.');
+      } catch (firestoreErr) {
+        const res = await fetch(apiUrl('/api/chatbot-content'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chatbotContent)
+        });
+        const data = await res.json();
+        if (data.success) setContentSaveMsg('Saved successfully!');
+        else setContentSaveMsg('Error saving.');
       }
     } catch (err) {
       setContentSaveMsg('Error saving.');
@@ -301,6 +352,259 @@ const AdminDashboard = () => {
     color: '#374151'
   };
 
+  const getSessionDurationSeconds = (s) => {
+    const stored = typeof s.duration_seconds === 'number' ? s.duration_seconds : 0;
+    if (stored > 0) return stored;
+    if (s.status !== 'active' || !s.created_at) return 0;
+    const createdMs = new Date(s.created_at).getTime();
+    if (Number.isNaN(createdMs)) return 0;
+    return Math.max(0, Math.floor((Date.now() - createdMs) / 1000));
+  };
+
+  const usageByUser = sessions.reduce((acc, s) => {
+    const user = s.user || {};
+    const email = user.email || s.email || 'Unknown';
+    if (!acc[email]) {
+      acc[email] = {
+        email,
+        name: user.name || s.name || '',
+        phone: user.phone || s.phone || '',
+        sessions: 0,
+        totalDurationSeconds: 0,
+        tabClicks: 0,
+        queries: 0,
+        meetings: 0,
+      };
+    }
+    acc[email].sessions += 1;
+    acc[email].totalDurationSeconds += getSessionDurationSeconds(s);
+    acc[email].tabClicks += (s.tab_clicks_total || 0);
+    acc[email].queries += (s.requested_query_count || 0);
+    acc[email].meetings += (s.requested_meeting_count || 0);
+    return acc;
+  }, {});
+
+  const usageByUserRows = Object.values(usageByUser).sort(
+    (a, b) => b.totalDurationSeconds - a.totalDurationSeconds
+  );
+
+  const rangeStartDate = (() => {
+    const now = new Date();
+    if (usageRange === '7d') return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    if (usageRange === '15d') return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14);
+    if (usageRange === 'month') return new Date(now.getFullYear(), now.getMonth(), 1);
+    if (usageRange === 'all') return new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    return null;
+  })();
+
+  const filteredSessions = rangeStartDate
+    ? sessions.filter((s) => {
+      if (!s.created_at) return false;
+      const ms = new Date(s.created_at).getTime();
+      return !Number.isNaN(ms) && ms >= rangeStartDate.getTime();
+    })
+    : sessions;
+
+  const totalUsageSeconds = filteredSessions.reduce((sum, s) => sum + getSessionDurationSeconds(s), 0);
+  const pendingTickets = tickets.filter(t => String(t.status || '').toLowerCase() === 'pending').length;
+  const pendingMeetings = meetings.filter(m => String(m.status || '').toLowerCase() === 'pending').length;
+
+  const topClickedTopics = (() => {
+    const idToText = {
+      sap: 'SAP Services',
+      oracle: 'Oracle Services',
+      staffing: 'Managed IT services',
+      careers: 'Careers',
+      ticket: 'Submit a query',
+      meeting: 'Request a meeting',
+    };
+
+    const menus = chatbotContent && chatbotContent.menus ? chatbotContent.menus : {};
+    Object.entries(menus).forEach(([menuId, menu]) => {
+      if (!menu || typeof menu !== 'object') return;
+      if (menuId && !idToText[menuId]) idToText[menuId] = menuId;
+      (menu.options || []).forEach((opt) => {
+        if (opt && opt.id && opt.text) idToText[opt.id] = opt.text;
+      });
+    });
+
+    const agg = {};
+    filteredSessions.forEach((s) => {
+      const clicks = s.tab_clicks && typeof s.tab_clicks === 'object' ? s.tab_clicks : {};
+      Object.entries(clicks).forEach(([k, v]) => {
+        const n = Number(v) || 0;
+        const label = idToText[k] || k;
+        agg[label] = (agg[label] || 0) + n;
+      });
+    });
+    return Object.entries(agg)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+  })();
+
+  const activityTrend = (() => {
+    const labelDay = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    const labelMonth = (d) => d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+
+    const normalizeDateOnly = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+
+    if (usageRange === 'month') {
+      const now = new Date();
+      const daysInMonthSoFar = now.getDate();
+
+      const weeks = [];
+      for (let startDay = 1; startDay <= daysInMonthSoFar; startDay += 7) {
+        const endDay = Math.min(daysInMonthSoFar, startDay + 6);
+        weeks.push({ startDay, endDay });
+      }
+
+      const weekKeyFor = (dt) => {
+        const day = dt.getDate();
+        const idx = Math.floor((day - 1) / 7) + 1;
+        return idx;
+      };
+
+      const counts = {};
+      weeks.forEach((w, i) => {
+        counts[i + 1] = { sessions: 0, queries: 0, meetings: 0, label: `W${i + 1} (${w.startDay}-${w.endDay})` };
+      });
+
+      filteredSessions.forEach((s) => {
+        if (!s.created_at) return;
+        const dt = new Date(s.created_at);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = weekKeyFor(dt);
+        if (counts[key]) counts[key].sessions += 1;
+      });
+      tickets.forEach((t) => {
+        if (!t.created_at) return;
+        const dt = new Date(t.created_at);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = weekKeyFor(dt);
+        if (counts[key]) counts[key].queries += 1;
+      });
+      meetings.forEach((m) => {
+        if (!m.created_at) return;
+        const dt = new Date(m.created_at);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = weekKeyFor(dt);
+        if (counts[key]) counts[key].meetings += 1;
+      });
+
+      return weeks.map((w, i) => ({
+        day: counts[i + 1].label,
+        sessions: counts[i + 1].sessions,
+        queries: counts[i + 1].queries,
+        meetings: counts[i + 1].meetings,
+      }));
+    }
+
+    if (usageRange === 'all') {
+      const now = new Date();
+      const months = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+        return d;
+      });
+
+      const counts = {};
+      months.forEach((d) => {
+        const key = d.getTime();
+        counts[key] = { sessions: 0, queries: 0, meetings: 0, label: labelMonth(d) };
+      });
+
+      const monthKeyFor = (dt) => new Date(dt.getFullYear(), dt.getMonth(), 1).getTime();
+
+      filteredSessions.forEach((s) => {
+        if (!s.created_at) return;
+        const dt = new Date(s.created_at);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = monthKeyFor(dt);
+        if (counts[key]) counts[key].sessions += 1;
+      });
+      tickets.forEach((t) => {
+        if (!t.created_at) return;
+        const dt = new Date(t.created_at);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = monthKeyFor(dt);
+        if (counts[key]) counts[key].queries += 1;
+      });
+      meetings.forEach((m) => {
+        if (!m.created_at) return;
+        const dt = new Date(m.created_at);
+        if (Number.isNaN(dt.getTime())) return;
+        const key = monthKeyFor(dt);
+        if (counts[key]) counts[key].meetings += 1;
+      });
+
+      return months.map((d) => {
+        const key = d.getTime();
+        return {
+          day: counts[key].label,
+          sessions: counts[key].sessions,
+          queries: counts[key].queries,
+          meetings: counts[key].meetings,
+        };
+      });
+    }
+
+    // 7d / 15d (daily)
+    const daysCount = usageRange === '15d' ? 15 : 7;
+    const days = Array.from({ length: daysCount }, (_, i) => {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() - ((daysCount - 1) - i));
+      return date;
+    });
+
+    const counts = {};
+    days.forEach((d) => {
+      const key = d.getTime();
+      counts[key] = { sessions: 0, queries: 0, meetings: 0, label: labelDay(d) };
+    });
+
+    filteredSessions.forEach((s) => {
+      if (!s.created_at) return;
+      const dt = new Date(s.created_at);
+      if (Number.isNaN(dt.getTime())) return;
+      const key = normalizeDateOnly(dt).getTime();
+      if (counts[key]) counts[key].sessions += 1;
+    });
+    tickets.forEach((t) => {
+      if (!t.created_at) return;
+      const dt = new Date(t.created_at);
+      if (Number.isNaN(dt.getTime())) return;
+      const key = normalizeDateOnly(dt).getTime();
+      if (counts[key]) counts[key].queries += 1;
+    });
+    meetings.forEach((m) => {
+      if (!m.created_at) return;
+      const dt = new Date(m.created_at);
+      if (Number.isNaN(dt.getTime())) return;
+      const key = normalizeDateOnly(dt).getTime();
+      if (counts[key]) counts[key].meetings += 1;
+    });
+
+    return days.map((d) => {
+      const key = d.getTime();
+      return {
+        day: counts[key].label,
+        sessions: counts[key].sessions,
+        queries: counts[key].queries,
+        meetings: counts[key].meetings,
+      };
+    });
+  })();
+
+  const requestStatusData = (items) => {
+    const pending = items.filter(x => String(x.status || '').toLowerCase() === 'pending').length;
+    const done = Math.max(0, items.length - pending);
+    return [
+      { name: 'Pending', value: pending },
+      { name: 'Other', value: done },
+    ];
+  };
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
       <div style={{
@@ -357,6 +661,9 @@ const AdminDashboard = () => {
           </button>
           <button style={tabStyle('traffic')} onClick={() => setActiveTab('traffic')}>
             Traffic Analysis
+          </button>
+          <button style={tabStyle('usage')} onClick={() => setActiveTab('usage')}>
+            Usage Tracking
           </button>
         </div>
 
@@ -614,7 +921,7 @@ const AdminDashboard = () => {
               </h3>
               <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '16px' }}>
                 These are the buttons users see first when they open the chatbot.
-                You can edit button text, add new buttons, or remove existing ones.
+                You can edit the button text (IDs/actions are fixed for consistent navigation).
               </p>
               <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px',
                 padding: '16px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
@@ -638,62 +945,57 @@ const AdminDashboard = () => {
                       resize: 'vertical' }}
                   />
                 </div>
-                {(chatbotContent.menus?.main?.options || []).map((opt, optIdx) => (
-                  <div key={opt.id} style={{ display: 'flex', gap: '8px',
-                    marginBottom: '8px', alignItems: 'center' }}>
-                    <input type="text" value={opt.text}
-                      onChange={e => {
-                        const updatedOptions = [
-                          ...chatbotContent.menus.main.options
-                        ];
-                        updatedOptions[optIdx] = {
-                          ...updatedOptions[optIdx],
-                          text: e.target.value
-                        };
-                        setChatbotContent(prev => ({
-                          ...prev,
-                          menus: {
-                            ...prev.menus,
-                            main: {
-                              ...prev.menus.main,
-                              options: updatedOptions
+                {curateMenus(chatbotContent.menus || {}).main.options.map((opt) => (
+                  <div key={opt.id} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={opt.text}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        setChatbotContent((prev) => {
+                          const existing = (prev.menus?.main?.options || []);
+                          const byId = existing.reduce((acc, o) => {
+                            if (o && o.id) acc[o.id] = o;
+                            return acc;
+                          }, {});
+                          const nextOptions = curateMenus(prev.menus || {}).main.options.map((base) => ({
+                            id: base.id,
+                            action: base.action,
+                            text: base.id === opt.id ? text : (byId[base.id]?.text || base.text),
+                          }));
+
+                          return {
+                            ...prev,
+                            menus: {
+                              ...prev.menus,
+                              main: {
+                                ...(prev.menus?.main || {}),
+                                options: nextOptions,
+                              }
                             }
-                          }
-                        }));
+                          };
+                        });
                       }}
-                      style={{ flex: 1, padding: '8px 10px',
-                        borderRadius: '8px', border: '1px solid #e2e8f0',
-                        fontSize: '13px' }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '13px',
+                        backgroundColor: 'white',
+                        color: '#111827',
+                      }}
                     />
                     <span style={{ fontSize: '11px', color: '#6b7280',
                       backgroundColor: '#e2e8f0', padding: '4px 8px',
                       borderRadius: '6px', whiteSpace: 'nowrap' }}>
                       {opt.action}
                     </span>
-                    {!['ticket','meeting','checkStatus'].includes(opt.action) && (
-                      <button onClick={() => {
-                        const updatedOptions =
-                          chatbotContent.menus.main.options
-                            .filter((_, i) => i !== optIdx);
-                        setChatbotContent(prev => ({
-                          ...prev,
-                          menus: {
-                            ...prev.menus,
-                            main: {
-                              ...prev.menus.main,
-                              options: updatedOptions
-                            }
-                          }
-                        }));
-                      }} style={{ padding: '6px 10px',
-                        backgroundColor: '#ef4444', color: 'white',
-                        border: 'none', borderRadius: '6px',
-                        cursor: 'pointer', fontSize: '12px' }}>
-                        Remove
-                      </button>
-                    )}
                   </div>
                 ))}
+                <p style={{ color: '#9ca3af', fontSize: '12px', marginTop: '12px', marginBottom: '0' }}>
+                  Main menu IDs/actions are fixed; only the labels are editable. You can still edit all sub-menus and answers below.
+                </p>
               </div>
               <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px',
                 padding: '16px', marginBottom: '24px', border: '1px solid #bfdbfe' }}>
@@ -1229,6 +1531,304 @@ const AdminDashboard = () => {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'usage' && (
+            <div>
+              <h2 style={{ color: '#1e3a5f', marginTop: 0 }}>Usage Tracking</h2>
+              <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>
+                Tracks tabs clicked, query/meeting requests, and time spent per user.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '20px' }}>
+                {[
+                  { label: 'Total Hours', value: (totalUsageSeconds / 3600).toFixed(2), color: '#6366f1' },
+                  { label: 'Tab Clicks', value: trafficData.eventCounts.tabClicks || 0, color: '#ef5b6c' },
+                  { label: 'Queries', value: trafficData.eventCounts.queries || 0, color: '#1e3a5f' },
+                  { label: 'Meetings', value: trafficData.eventCounts.meetings || 0, color: '#22c55e' },
+                  { label: 'Pending Requests', value: pendingTickets + pendingMeetings, color: '#f59e0b' },
+                ].map((stat, i) => (
+                  <div key={i} style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '6px' }}>{stat.label}</div>
+                    <div style={{ fontSize: '22px', fontWeight: '800', color: stat.color }}>{stat.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>Range:</div>
+                  <select
+                    value={usageRange}
+                    onChange={(e) => setUsageRange(e.target.value)}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: '1px solid #e2e8f0',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      backgroundColor: 'white',
+                      color: '#1e293b',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="7d">Last 7 days (Default)</option>
+                    <option value="15d">Last 15 days</option>
+                    <option value="month">This month (Weekly)</option>
+                    <option value="all">Overall (Monthly)</option>
+                  </select>
+                  <button
+                    onClick={() => setShowUsageCharts(v => !v)}
+                    style={{
+                      backgroundColor: '#1e3a5f',
+                      color: 'white',
+                      border: 'none',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '700'
+                    }}
+                  >
+                    {showUsageCharts ? 'Hide charts' : 'Show charts'}
+                  </button>
+                </div>
+              </div>
+
+              {showUsageCharts && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                    <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '12px' }}>
+                      Activity Trend
+                    </h3>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={activityTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#64748b' }} />
+                        <YAxis tick={{ fontSize: 12, fill: '#64748b' }} allowDecimals={false} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        <Bar dataKey="sessions" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="queries" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="meetings" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>
+                      {usageRange === 'month'
+                        ? 'This month grouped by week.'
+                        : usageRange === 'all'
+                          ? 'Overall grouped by month (last 12 months).'
+                          : 'Grouped by day for the selected range.'}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                      <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '12px' }}>Query Status</h3>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={requestStatusData(tickets)}
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={70}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                            labelLine={false}
+                            fontSize={11}
+                          >
+                            <Cell fill="#f59e0b" />
+                            <Cell fill="#94a3b8" />
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>
+                        Based on tickets created in last 7 days.
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                      <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '12px' }}>Meeting Status</h3>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={requestStatusData(meetings)}
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={70}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                            labelLine={false}
+                            fontSize={11}
+                          >
+                            <Cell fill="#f59e0b" />
+                            <Cell fill="#94a3b8" />
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>
+                        Based on meeting requests created in last 7 days.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                    <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '12px' }}>Top Clicked Topics</h3>
+                    {topClickedTopics.length === 0 ? (
+                      <div style={{ textAlign: 'center', color: '#6b7280', padding: '28px' }}>
+                        No click data yet
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={topClickedTopics} layout="vertical" margin={{ left: 10, right: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis type="number" tick={{ fontSize: 12, fill: '#64748b' }} allowDecimals={false} />
+                          <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 12, fill: '#64748b' }} />
+                          <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                          <Bar dataKey="value" fill="#ef5b6c" radius={[6, 6, 6, 6]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>
+                      Top clicked topics from sessions created in the selected range.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '12px' }}>Per User</h3>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Email</th>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Phone</th>
+                    <th style={thStyle}>Sessions</th>
+                    <th style={thStyle}>Hours Used</th>
+                    <th style={thStyle}>Tab Clicks</th>
+                    <th style={thStyle}>Queries</th>
+                    <th style={thStyle}>Meetings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageByUserRows.map((u) => (
+                    <tr key={u.email}>
+                      <td style={tdStyle}>{u.email}</td>
+                      <td style={tdStyle}>{u.name}</td>
+                      <td style={tdStyle}>{u.phone}</td>
+                      <td style={tdStyle}>{u.sessions}</td>
+                      <td style={tdStyle}>{(u.totalDurationSeconds / 3600).toFixed(2)}</td>
+                      <td style={tdStyle}>{u.tabClicks}</td>
+                      <td style={tdStyle}>{u.queries}</td>
+                      <td style={tdStyle}>{u.meetings}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '24px' }}>
+                <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                  <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '10px' }}>
+                    Latest Queries (Tickets) {pendingTickets ? `(Pending: ${pendingTickets})` : ''}
+                  </h3>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Ticket ID</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Customer</th>
+                        <th style={thStyle}>Phone</th>
+                        <th style={thStyle}>Dept</th>
+                        <th style={thStyle}>Preferred</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tickets.slice(0, 10).map((t) => (
+                        <tr key={t.ticket_id || t.id}>
+                          <td style={tdStyle}>{t.ticket_id}</td>
+                          <td style={tdStyle}>{t.status}</td>
+                          <td style={tdStyle}>{t.email}</td>
+                          <td style={tdStyle}>{t.phone}</td>
+                          <td style={tdStyle}>{t.department}</td>
+                          <td style={tdStyle}>
+                            {t.preferred_date ? `${t.preferred_date} ${t.preferred_time || ''}` : ''}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                  <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '10px' }}>
+                    Latest Meeting Requests {pendingMeetings ? `(Pending: ${pendingMeetings})` : ''}
+                  </h3>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Meeting ID</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Customer</th>
+                        <th style={thStyle}>Phone</th>
+                        <th style={thStyle}>Purpose</th>
+                        <th style={thStyle}>When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {meetings.slice(0, 10).map((m) => (
+                        <tr key={m.meeting_id || m.id}>
+                          <td style={tdStyle}>{m.meeting_id}</td>
+                          <td style={tdStyle}>{m.status}</td>
+                          <td style={tdStyle}>{m.email}</td>
+                          <td style={tdStyle}>{m.phone}</td>
+                          <td style={tdStyle}>{m.purpose}</td>
+                          <td style={tdStyle}>{m.date ? `${m.date} ${m.time || ''}` : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <h3 style={{ color: '#1e3a5f', marginTop: '24px', marginBottom: '12px' }}>Per Session</h3>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Session ID</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>User</th>
+                    <th style={thStyle}>Created</th>
+                    <th style={thStyle}>Ended</th>
+                    <th style={thStyle}>Hours</th>
+                    <th style={thStyle}>Tab Clicks</th>
+                    <th style={thStyle}>Tabs Clicked</th>
+                    <th style={thStyle}>Queries</th>
+                    <th style={thStyle}>Meetings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((s) => {
+                    const user = s.user || {};
+                    const durationSeconds = getSessionDurationSeconds(s);
+                    return (
+                      <tr key={s.session_id}>
+                        <td style={tdStyle}>{s.session_id}</td>
+                        <td style={tdStyle}>{s.status}</td>
+                        <td style={tdStyle}>{user.email || 'Unknown'}</td>
+                        <td style={tdStyle}>{s.created_at ? new Date(s.created_at).toLocaleString() : ''}</td>
+                        <td style={tdStyle}>{s.ended_at ? new Date(s.ended_at).toLocaleString() : ''}</td>
+                        <td style={tdStyle}>{(durationSeconds / 3600).toFixed(2)}</td>
+                        <td style={tdStyle}>{s.tab_clicks_total || 0}</td>
+                        <td style={tdStyle}>{Array.isArray(s.tabs_clicked) ? s.tabs_clicked.join(', ') : ''}</td>
+                        <td style={tdStyle}>{s.requested_query_count || 0}</td>
+                        <td style={tdStyle}>{s.requested_meeting_count || 0}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

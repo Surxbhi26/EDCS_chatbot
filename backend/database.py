@@ -2,15 +2,34 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 from dotenv import load_dotenv
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 # Timezone for India Standard Time
-IST = ZoneInfo('Asia/Kolkata')
+try:
+    IST = ZoneInfo('Asia/Kolkata')
+except Exception:
+    IST = timezone(timedelta(hours=5, minutes=30))
 
 def get_ist_now():
     """Get current time in IST as ISO format string"""
     return datetime.now(IST).isoformat()
+
+
+def _parse_iso_dt(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if hasattr(value, 'timestamp'):
+        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    return None
 
 load_dotenv()
 
@@ -222,7 +241,7 @@ def initialize_email_config():
 initialize_email_config()
 
 
-def create_session(session_id):
+def create_session(session_id, user=None):
     """Create a new chat session document."""
     sessions_ref = db.collection('sessions')
     now = get_ist_now()
@@ -231,7 +250,15 @@ def create_session(session_id):
         'status': 'active',
         'last_active': now,
         'created_at': now,
+        'ended_at': None,
+        'duration_seconds': 0,
         'query_history': [],
+        'tabs_clicked': [],
+        'tab_clicks': {},
+        'tab_clicks_total': 0,
+        'requested_query_count': 0,
+        'requested_meeting_count': 0,
+        'user': user or {},
         'terminated_reason': None,
     })
 
@@ -267,10 +294,20 @@ def end_session(session_id, reason):
         doc = next(docs, None)
         if not doc:
             return
+        data = doc.to_dict() or {}
+        created_at_dt = _parse_iso_dt(data.get('created_at'))
+        ended_at = get_ist_now()
+        ended_at_dt = _parse_iso_dt(ended_at)
+        duration_seconds = 0
+        if created_at_dt and ended_at_dt:
+            duration_seconds = max(0, int((ended_at_dt - created_at_dt).total_seconds()))
+
         doc.reference.update({
             'status': 'inactive',
             'terminated_reason': reason,
             'last_active': get_ist_now(),
+            'ended_at': ended_at,
+            'duration_seconds': duration_seconds,
         })
     except Exception as e:
         print(f"❌ Error in end_session for {session_id}: {e}")
@@ -437,3 +474,87 @@ def check_and_record_query(session_id, query):
     except Exception as e:
         print(f"Error in check_and_record_query: {e}")
         return {"terminated": False}
+
+
+def record_tab_click(session_id, menu_id=None, option_id=None, option_text=None, action=None):
+    try:
+        sessions_ref = db.collection('sessions')
+        docs = list(sessions_ref.where(
+            filter=firestore.FieldFilter('session_id', '==', session_id)
+        ).limit(1).stream())
+
+        if not docs:
+            return False
+
+        doc_ref = docs[0].reference
+        # Prefer human-friendly label for analytics
+        key = option_text or option_id or menu_id or 'unknown'
+        safe_key = str(key)[:120]
+
+        @firestore.transactional
+        def update_in_transaction(transaction, doc_ref):
+            snapshot = doc_ref.get(transaction=transaction)
+            data = snapshot.to_dict() or {}
+
+            tab_clicks = data.get('tab_clicks') or {}
+            if not isinstance(tab_clicks, dict):
+                tab_clicks = {}
+
+            tab_clicks[safe_key] = int(tab_clicks.get(safe_key, 0) or 0) + 1
+
+            tabs_clicked = data.get('tabs_clicked') or []
+            if not isinstance(tabs_clicked, list):
+                tabs_clicked = []
+            if safe_key not in tabs_clicked:
+                tabs_clicked.append(safe_key)
+
+            transaction.update(doc_ref, {
+                'tab_clicks': tab_clicks,
+                'tabs_clicked': tabs_clicked,
+                'tab_clicks_total': int(data.get('tab_clicks_total', 0) or 0) + 1,
+                'last_active': get_ist_now(),
+                'last_event': {
+                    'menu_id': menu_id,
+                    'option_id': option_id,
+                    'option_text': option_text,
+                    'action': action,
+                    'at': get_ist_now(),
+                },
+            })
+
+        transaction = db.transaction()
+        update_in_transaction(transaction, doc_ref)
+        return True
+    except Exception as e:
+        print(f"Error in record_tab_click: {e}")
+        return False
+
+
+def increment_session_action(session_id, action_type):
+    try:
+        sessions_ref = db.collection('sessions')
+        docs = list(sessions_ref.where(
+            filter=firestore.FieldFilter('session_id', '==', session_id)
+        ).limit(1).stream())
+        if not docs:
+            return False
+
+        doc_ref = docs[0].reference
+
+        @firestore.transactional
+        def update_in_transaction(transaction, doc_ref, action_type):
+            snapshot = doc_ref.get(transaction=transaction)
+            data = snapshot.to_dict() or {}
+            updates = {'last_active': get_ist_now()}
+            if action_type == 'query':
+                updates['requested_query_count'] = int(data.get('requested_query_count', 0) or 0) + 1
+            elif action_type == 'meeting':
+                updates['requested_meeting_count'] = int(data.get('requested_meeting_count', 0) or 0) + 1
+            transaction.update(doc_ref, updates)
+
+        transaction = db.transaction()
+        update_in_transaction(transaction, doc_ref, action_type)
+        return True
+    except Exception as e:
+        print(f"Error in increment_session_action: {e}")
+        return False
