@@ -215,14 +215,14 @@ const EDCSChatbot = () => {
   }, []);
 
   const rawMenus = (chatbotContent && chatbotContent.menus)
-    ? chatbotContent.menus
+    ? { ...chatbotData, ...(chatbotContent.menus || {}) }
     : chatbotData;
   const activeChatbotData = curateMenus(rawMenus);
 
   const rawAnswers = (chatbotContent && chatbotContent.answers)
-    ? chatbotContent.answers
+    ? { ...answers, ...(chatbotContent.answers || {}) }
     : answers;
-  const activeAnswers = { ...rawAnswers, ...curatedCareersAnswers };
+  const activeAnswers = { ...curatedCareersAnswers, ...rawAnswers };
 
   const welcomeMessages = (chatbotContent && chatbotContent.welcomeMessages)
     ? chatbotContent.welcomeMessages

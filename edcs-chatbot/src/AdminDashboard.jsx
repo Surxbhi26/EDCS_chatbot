@@ -5,7 +5,8 @@ import { signOut } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { curateMenus } from './curatedChatbotConfig';
+import { curateMenus, curatedCareersAnswers } from './curatedChatbotConfig';
+import { chatbotData, answers as defaultAnswers } from './chatbotData';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('email');
@@ -18,6 +19,10 @@ const AdminDashboard = () => {
   const [meetings, setMeetings] = useState([]);
   const [showUsageCharts, setShowUsageCharts] = useState(true);
   const [usageRange, setUsageRange] = useState('7d'); // 7d | 15d | month | all
+  const [usageSearchDraft, setUsageSearchDraft] = useState('');
+  const [usageSearch, setUsageSearch] = useState('');
+  const [usageUserTab, setUsageUserTab] = useState('all'); // all | repeated
+  const [userDetailsPopup, setUserDetailsPopup] = useState(null);
   const [cleanupStatus, setCleanupStatus] = useState('');
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [chatbotContent, setChatbotContent] = useState(null);
@@ -352,6 +357,58 @@ const AdminDashboard = () => {
     color: '#374151'
   };
 
+  const subTabStyle = (selected) => ({
+    padding: '8px 12px',
+    border: `1px solid ${selected ? '#1e3a5f' : '#e2e8f0'}`,
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+    backgroundColor: selected ? '#1e3a5f' : 'white',
+    color: selected ? 'white' : '#1e3a5f',
+    borderRadius: '8px',
+  });
+
+  const statusPillStyle = (statusRaw) => {
+    const status = String(statusRaw || '').toLowerCase();
+    if (status === 'active') {
+      return { backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #86efac' };
+    }
+    if (status === 'inactive') {
+      return { backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' };
+    }
+    return { backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0' };
+  };
+
+  const normalizeSearch = (v) => String(v || '').toLowerCase().trim();
+
+  const sessionSearchText = (s) => {
+    const user = s && s.user ? s.user : {};
+    const parts = [
+      s && s.session_id,
+      s && s.status,
+      user && user.email,
+      user && user.name,
+      user && user.phone,
+      s && s.email,
+      s && s.name,
+      s && s.phone,
+      user && (user.company || user.companyName || user.company_name),
+      s && (s.company || s.companyName || s.company_name),
+    ];
+    return normalizeSearch(parts.filter(Boolean).join(' '));
+  };
+
+  const userSearchText = (u) => {
+    const parts = [u && u.email, u && u.name, u && u.phone];
+    return normalizeSearch(parts.filter(Boolean).join(' '));
+  };
+
+  const applyUsageSearch = () => setUsageSearch(usageSearchDraft.trim());
+  const clearUsageSearch = () => {
+    setUsageSearch('');
+    setUsageSearchDraft('');
+  };
+
   const getSessionDurationSeconds = (s) => {
     const stored = typeof s.duration_seconds === 'number' ? s.duration_seconds : 0;
     if (stored > 0) return stored;
@@ -387,6 +444,18 @@ const AdminDashboard = () => {
   const usageByUserRows = Object.values(usageByUser).sort(
     (a, b) => b.totalDurationSeconds - a.totalDurationSeconds
   );
+
+  const usageSearchNorm = normalizeSearch(usageSearch);
+  const visibleSessions = usageSearchNorm
+    ? sessions.filter((s) => sessionSearchText(s).includes(usageSearchNorm))
+    : sessions;
+
+  const visibleUsageByUserRows = usageSearchNorm
+    ? usageByUserRows.filter((u) => userSearchText(u).includes(usageSearchNorm))
+    : usageByUserRows;
+
+  const repeatedUsageByUserRows = visibleUsageByUserRows.filter((u) => (u.sessions || 0) > 1);
+  const perUserRowsToShow = usageUserTab === 'repeated' ? repeatedUsageByUserRows : visibleUsageByUserRows;
 
   const rangeStartDate = (() => {
     const now = new Date();
@@ -442,6 +511,25 @@ const AdminDashboard = () => {
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
   })();
+
+  const effectiveEditorMenus = chatbotContent
+    ? { ...chatbotData, ...(chatbotContent.menus || {}) }
+    : chatbotData;
+  const curatedEditorMenus = curateMenus(effectiveEditorMenus);
+  const editorMainOptions = curatedEditorMenus?.main?.options || [];
+  const editorMenuKeysInOrder = editorMainOptions
+    .filter((o) => o && o.action === 'menu' && o.id)
+    .map((o) => o.id);
+
+  const getEffectiveAnswerText = (answerId) => {
+    if (!answerId) return '';
+    if (chatbotContent && chatbotContent.answers && chatbotContent.answers[answerId] != null) {
+      return chatbotContent.answers[answerId];
+    }
+    if (defaultAnswers && defaultAnswers[answerId] != null) return defaultAnswers[answerId];
+    if (curatedCareersAnswers && curatedCareersAnswers[answerId] != null) return curatedCareersAnswers[answerId];
+    return '';
+  };
 
   const activityTrend = (() => {
     const labelDay = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
@@ -917,11 +1005,11 @@ const AdminDashboard = () => {
               {/* Main Menu Options */}
               <h3 style={{ color: '#1e3a5f', marginBottom: '8px',
                 paddingBottom: '8px', borderBottom: '2px solid #e2e8f0' }}>
-                Main Menu Options
+                3) Main Menu (Current Chatbot)
               </h3>
               <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '16px' }}>
-                These are the buttons users see first when they open the chatbot.
-                You can edit the button text (IDs/actions are fixed for consistent navigation).
+                This section matches the current chatbot flow (SAP, Oracle, Managed IT services, Careers, Submit a query).
+                IDs/actions are fixed; you can edit only the text shown to users.
               </p>
               <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px',
                 padding: '16px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
@@ -931,12 +1019,16 @@ const AdminDashboard = () => {
                     Main Menu Greeting Message
                   </label>
                   <textarea rows="2"
-                    value={chatbotContent.menus?.main?.message || ''}
+                    value={
+                      (chatbotContent.menus?.main?.message != null)
+                        ? chatbotContent.menus.main.message
+                        : (curatedEditorMenus?.main?.message || '')
+                    }
                     onChange={e => setChatbotContent(prev => ({
                       ...prev,
                       menus: {
-                        ...prev.menus,
-                        main: { ...prev.menus.main, message: e.target.value }
+                        ...(prev.menus || {}),
+                        main: { ...((prev.menus || {}).main || {}), message: e.target.value }
                       }
                     }))}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px',
@@ -945,7 +1037,7 @@ const AdminDashboard = () => {
                       resize: 'vertical' }}
                   />
                 </div>
-                {curateMenus(chatbotContent.menus || {}).main.options.map((opt) => (
+                {editorMainOptions.map((opt) => (
                   <div key={opt.id} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
                     <input
                       type="text"
@@ -958,7 +1050,7 @@ const AdminDashboard = () => {
                             if (o && o.id) acc[o.id] = o;
                             return acc;
                           }, {});
-                          const nextOptions = curateMenus(prev.menus || {}).main.options.map((base) => ({
+                          const nextOptions = curateMenus({ ...chatbotData, ...(prev.menus || {}) }).main.options.map((base) => ({
                             id: base.id,
                             action: base.action,
                             text: base.id === opt.id ? text : (byId[base.id]?.text || base.text),
@@ -994,11 +1086,12 @@ const AdminDashboard = () => {
                   </div>
                 ))}
                 <p style={{ color: '#9ca3af', fontSize: '12px', marginTop: '12px', marginBottom: '0' }}>
-                  Main menu IDs/actions are fixed; only the labels are editable. You can still edit all sub-menus and answers below.
+                  Adding/removing main-menu buttons is disabled in the current chatbot; edit the labels and the sub-menus below.
                 </p>
               </div>
-              <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px',
-                padding: '16px', marginBottom: '24px', border: '1px solid #bfdbfe' }}>
+              {false && (
+                <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px',
+                  padding: '16px', marginBottom: '24px', border: '1px solid #bfdbfe' }}>
                 <p style={{ color: '#374151', fontSize: '13px', fontWeight: '600',
                   marginTop: 0, marginBottom: '8px' }}>
                   Add a button directly to main menu
@@ -1127,22 +1220,31 @@ const AdminDashboard = () => {
                   Note: Submit a Query, Request a Meeting, and Check Query Status
                   buttons cannot be removed as they are core features.
                 </p>
-              </div>
+                </div>
+              )}
 
               {/* Sub Menus */}
               <h3 style={{ color: '#1e3a5f', marginBottom: '8px',
                 paddingBottom: '8px', borderBottom: '2px solid #e2e8f0' }}>
-                Sub Menus & Answers
+                4) Sub Menus & Answers (In Order)
               </h3>
               <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '16px' }}>
-                Each sub menu appears when a user clicks a main menu button.
-                You can edit the message, edit option text, add new options,
-                and write the answer for each option.
+                These appear after a user clicks a main menu option. Edit them in the same order users see them.
               </p>
 
-              {chatbotContent.menus && Object.entries(chatbotContent.menus)
-                .filter(([key]) => key !== 'main')
-                .map(([menuKey, menu]) => (
+              {editorMenuKeysInOrder
+                .map((key) => {
+                  const effectiveMenu = curatedEditorMenus?.[key] || {};
+                  const fromContent = chatbotContent.menus?.[key] || {};
+                  const options = Array.isArray(fromContent.options)
+                    ? fromContent.options
+                    : (Array.isArray(effectiveMenu.options) ? effectiveMenu.options : []);
+                  const message = (fromContent.message != null)
+                    ? fromContent.message
+                    : (effectiveMenu.message || '');
+                  return [key, { ...effectiveMenu, ...fromContent, message, options }];
+                })
+                .map(([menuKey, menu], idx) => (
                   <div key={menuKey} style={{ backgroundColor: '#f8fafc',
                     borderRadius: '12px', padding: '20px', marginBottom: '20px',
                     border: '1px solid #e2e8f0' }}>
@@ -1152,10 +1254,13 @@ const AdminDashboard = () => {
                       alignItems: 'center', marginBottom: '14px' }}>
                       <h4 style={{ color: '#1e3a5f', margin: 0,
                         textTransform: 'capitalize', fontSize: '15px' }}>
-                        📂 {menuKey}
+                        {idx + 1}. {editorMainOptions.find((o) => o.id === menuKey)?.text || menuKey}
+                        <span style={{ marginLeft: '8px', color: '#64748b', fontWeight: '700', fontSize: '12px' }}>
+                          ({menuKey})
+                        </span>
                       </h4>
                       {!['sap','oracle','staffing','company','engagement',
-                        'support','contact'].includes(menuKey) && (
+                        'support','contact'].includes(menuKey) && false && (
                         <button onClick={() => {
                           if (!window.confirm(
                             `Delete entire "${menuKey}" menu section? ` +
@@ -1196,9 +1301,9 @@ const AdminDashboard = () => {
                         onChange={e => setChatbotContent(prev => ({
                           ...prev,
                           menus: {
-                            ...prev.menus,
+                            ...(prev.menus || {}),
                             [menuKey]: {
-                              ...prev.menus[menuKey],
+                              ...((prev.menus || {})[menuKey] || {}),
                               message: e.target.value
                             }
                           }
@@ -1234,9 +1339,9 @@ const AdminDashboard = () => {
                               setChatbotContent(prev => ({
                                 ...prev,
                                 menus: {
-                                  ...prev.menus,
+                                  ...(prev.menus || {}),
                                   [menuKey]: {
-                                    ...prev.menus[menuKey],
+                                    ...((prev.menus || {})[menuKey] || {}),
                                     options: updatedOptions
                                   }
                                 }
@@ -1253,24 +1358,25 @@ const AdminDashboard = () => {
                             {opt.action}
                           </span>
                           <button onClick={() => {
-                            const updatedOptions = menu.options
-                              .filter((_, i) => i !== optIdx);
-                            // Also remove the answer
-                            const updatedAnswers = {
-                              ...chatbotContent.answers
-                            };
-                            delete updatedAnswers[opt.id];
-                            setChatbotContent(prev => ({
-                              ...prev,
-                              answers: updatedAnswers,
-                              menus: {
-                                ...prev.menus,
-                                [menuKey]: {
-                                  ...prev.menus[menuKey],
-                                  options: updatedOptions
+                            setChatbotContent((prev) => {
+                              const prevMenu = (prev.menus || {})[menuKey] || {};
+                              const baseOptions = Array.isArray(prevMenu.options) ? prevMenu.options : (menu.options || []);
+                              const updatedOptions = baseOptions.filter((_, i) => i !== optIdx);
+                              const updatedAnswers = { ...(prev.answers || {}) };
+                              if (opt && opt.id) delete updatedAnswers[opt.id];
+
+                              return {
+                                ...prev,
+                                answers: updatedAnswers,
+                                menus: {
+                                  ...(prev.menus || {}),
+                                  [menuKey]: {
+                                    ...prevMenu,
+                                    options: updatedOptions
+                                  }
                                 }
-                              }
-                            }));
+                              };
+                            });
                           }} style={{ padding: '6px 10px',
                             backgroundColor: '#ef4444', color: 'white',
                             border: 'none', borderRadius: '6px',
@@ -1288,11 +1394,11 @@ const AdminDashboard = () => {
                             </label>
                             <textarea rows="4"
                               placeholder="Type the answer for this option..."
-                              value={chatbotContent.answers?.[opt.id] || ''}
+                              value={getEffectiveAnswerText(opt.id)}
                               onChange={e => setChatbotContent(prev => ({
                                 ...prev,
                                 answers: {
-                                  ...prev.answers,
+                                  ...(prev.answers || {}),
                                   [opt.id]: e.target.value
                                 }
                               }))}
@@ -1327,11 +1433,11 @@ const AdminDashboard = () => {
                       ];
                       setChatbotContent(prev => ({
                         ...prev,
-                        answers: { ...prev.answers, [newId]: '' },
+                        answers: { ...(prev.answers || {}), [newId]: '' },
                         menus: {
-                          ...prev.menus,
+                          ...(prev.menus || {}),
                           [menuKey]: {
-                            ...prev.menus[menuKey],
+                            ...((prev.menus || {})[menuKey] || {}),
                             options: updatedOptions
                           }
                         }
@@ -1347,9 +1453,10 @@ const AdminDashboard = () => {
                 ))}
 
               {/* Add New Section Button */}
-              <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px',
-                padding: '20px', marginBottom: '24px',
-                border: '1px solid #bfdbfe' }}>
+              {false && (
+                <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px',
+                  padding: '20px', marginBottom: '24px',
+                  border: '1px solid #bfdbfe' }}>
                 <h4 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '8px' }}>
                   + Add New Menu Section
                 </h4>
@@ -1426,7 +1533,8 @@ const AdminDashboard = () => {
                   cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
                   + Add New Section
                 </button>
-              </div>
+                </div>
+              )}
 
               {/* Save Button */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px',
@@ -1698,7 +1806,71 @@ const AdminDashboard = () => {
                 </div>
               )}
 
-              <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: '12px' }}>Per User</h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h3 style={{ color: '#1e3a5f', marginTop: 0, marginBottom: 0 }}>Per User</h3>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" style={subTabStyle(usageUserTab === 'all')} onClick={() => setUsageUserTab('all')}>
+                      All Users
+                    </button>
+                    <button type="button" style={subTabStyle(usageUserTab === 'repeated')} onClick={() => setUsageUserTab('repeated')}>
+                      Repeated Users
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <input
+                    value={usageSearchDraft}
+                    onChange={(e) => setUsageSearchDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyUsageSearch();
+                    }}
+                    placeholder="Search company / person (email, name, phone)"
+                    style={{
+                      padding: '9px 10px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '10px',
+                      minWidth: '280px',
+                      fontSize: '13px'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={applyUsageSearch}
+                    style={{
+                      padding: '9px 12px',
+                      backgroundColor: '#1e3a5f',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '13px'
+                    }}
+                  >
+                    Search
+                  </button>
+                  {(usageSearch || usageSearchDraft) && (
+                    <button
+                      type="button"
+                      onClick={clearUsageSearch}
+                      style={{
+                        padding: '9px 12px',
+                        backgroundColor: '#e2e8f0',
+                        color: '#1e3a5f',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '13px'
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
               <table style={tableStyle}>
                 <thead>
                   <tr>
@@ -1713,7 +1885,7 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {usageByUserRows.map((u) => (
+                  {perUserRowsToShow.map((u) => (
                     <tr key={u.email}>
                       <td style={tdStyle}>{u.email}</td>
                       <td style={tdStyle}>{u.name}</td>
@@ -1796,7 +1968,7 @@ const AdminDashboard = () => {
               <table style={tableStyle}>
                 <thead>
                   <tr>
-                    <th style={thStyle}>Session ID</th>
+                    <th style={thStyle}>S. No.</th>
                     <th style={thStyle}>Status</th>
                     <th style={thStyle}>User</th>
                     <th style={thStyle}>Created</th>
@@ -1809,14 +1981,40 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((s) => {
+                  {visibleSessions.map((s, idx) => {
                     const user = s.user || {};
                     const durationSeconds = getSessionDurationSeconds(s);
+                    const email = user.email || s.email || 'Unknown';
+                    const phone = user.phone || s.phone || '';
+                    const rowKey = s.session_id || s.id || `${email}-${idx}`;
                     return (
-                      <tr key={s.session_id}>
-                        <td style={tdStyle}>{s.session_id}</td>
-                        <td style={tdStyle}>{s.status}</td>
-                        <td style={tdStyle}>{user.email || 'Unknown'}</td>
+                      <tr key={rowKey}>
+                        <td style={tdStyle}>{idx + 1}</td>
+                        <td style={tdStyle}>
+                          <span style={{ ...statusPillStyle(s.status), display: 'inline-block', padding: '3px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px' }}>
+                            {String(s.status || '').toLowerCase() || 'unknown'}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <button
+                            type="button"
+                            onClick={() => setUserDetailsPopup({ email, phone })}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              padding: 0,
+                              margin: 0,
+                              cursor: 'pointer',
+                              color: '#1e3a5f',
+                              textDecoration: 'underline',
+                              fontSize: '13px',
+                              fontWeight: 600
+                            }}
+                            title="Click to view user details"
+                          >
+                            {email}
+                          </button>
+                        </td>
                         <td style={tdStyle}>{s.created_at ? new Date(s.created_at).toLocaleString() : ''}</td>
                         <td style={tdStyle}>{s.ended_at ? new Date(s.ended_at).toLocaleString() : ''}</td>
                         <td style={tdStyle}>{(durationSeconds / 3600).toFixed(2)}</td>
@@ -1829,6 +2027,73 @@ const AdminDashboard = () => {
                   })}
                 </tbody>
               </table>
+
+              {userDetailsPopup && (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  onClick={() => setUserDetailsPopup(null)}
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '20px',
+                    zIndex: 9999
+                  }}
+                >
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: '100%',
+                      maxWidth: '420px',
+                      borderRadius: '14px',
+                      backgroundColor: 'white',
+                      border: '1px solid #e2e8f0',
+                      boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
+                      padding: '16px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                      <div style={{ fontWeight: 800, color: '#1e3a5f', fontSize: '15px' }}>
+                        User Details
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setUserDetailsPopup(null)}
+                        style={{
+                          border: 'none',
+                          background: '#e2e8f0',
+                          color: '#0f172a',
+                          cursor: 'pointer',
+                          borderRadius: '10px',
+                          padding: '6px 10px',
+                          fontWeight: 800
+                        }}
+                        aria-label="Close"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: '12px', fontSize: '13px', color: '#334155' }}>
+                      <div style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: '#f8fafc' }}>
+                        <div style={{ fontWeight: 800, color: '#0f172a' }}>Email</div>
+                        <div style={{ marginTop: '4px' }}>{userDetailsPopup.email || 'Unknown'}</div>
+                      </div>
+
+                      <div style={{ height: '10px' }} />
+
+                      <div style={{ padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: '#f8fafc' }}>
+                        <div style={{ fontWeight: 800, color: '#0f172a' }}>Phone</div>
+                        <div style={{ marginTop: '4px' }}>{userDetailsPopup.phone || '-'}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
